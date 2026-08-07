@@ -50,6 +50,14 @@ class Wrapper(mjx_env.MjxEnv):
   def unwrapped(self) -> Any:
     return self.env.unwrapped
 
+  @property
+  def reward_softness(self) -> float:
+    return self.env.reward_softness
+
+  @reward_softness.setter
+  def reward_softness(self, value: float) -> None:
+    self.env.reward_softness = value
+
   def __getattr__(self, name):
     if name == '__setstate__':
       raise AttributeError(name)
@@ -244,5 +252,4 @@ class BraxDomainRandomizationVmapWrapper(Wrapper):
         self._mjx_model_v, state, action
     )
     return res
-
 

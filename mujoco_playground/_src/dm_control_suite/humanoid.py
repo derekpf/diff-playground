@@ -143,7 +143,7 @@ class Humanoid(mjx_env.MjxEnv):
     standing = reward.tolerance(
         self._head_height(data),
         bounds=(_STAND_HEIGHT, float("inf")),
-        margin=_STAND_HEIGHT / 4,
+        margin=_STAND_HEIGHT / 4, softness=self.reward_softness,
     )
     metrics["reward/standing"] = standing
 
@@ -152,7 +152,7 @@ class Humanoid(mjx_env.MjxEnv):
         bounds=(0.9, float("inf")),
         sigmoid="linear",
         margin=1.9,
-        value_at_margin=0,
+        value_at_margin=0, softness=self.reward_softness,
     )
     metrics["reward/upright"] = upright
 
@@ -160,7 +160,7 @@ class Humanoid(mjx_env.MjxEnv):
     metrics["reward/stand"] = stand_reward
 
     small_control = reward.tolerance(
-        action, margin=1, value_at_margin=0, sigmoid="quadratic"
+        action, margin=1, value_at_margin=0, sigmoid="quadratic", softness=self.reward_softness
     ).mean()
     small_control = (4 + small_control) / 5
     metrics["reward/small_control"] = small_control
@@ -172,7 +172,7 @@ class Humanoid(mjx_env.MjxEnv):
 
   def _stand_reward(self, data: mjx.Data) -> jax.Array:
     horizontal_velocity = self._center_of_mass_velocity(data)[:2]
-    dont_move = reward.tolerance(horizontal_velocity, margin=2).mean()
+    dont_move = reward.tolerance(horizontal_velocity, margin=2, softness=self.reward_softness).mean()
     return dont_move
 
   def _move_reward(self, data: mjx.Data) -> jax.Array:
@@ -181,7 +181,7 @@ class Humanoid(mjx_env.MjxEnv):
         bounds=(self._move_speed, float("inf")),
         margin=self._move_speed,
         value_at_margin=0,
-        sigmoid="linear",
+        sigmoid="linear", softness=self.reward_softness,
     )
     move = (5 * move + 1) / 6
     return move

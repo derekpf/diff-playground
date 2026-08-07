@@ -181,7 +181,7 @@ class Swim(mjx_env.MjxEnv):
     in_target = reward.tolerance(
         sj.norm(mouth_to_target_local),
         bounds=(0, self._radii),
-        margin=2 * self._radii,
+        margin=2 * self._radii, softness=self.reward_softness,
     )
     metrics["reward/in_target"] = in_target
 

@@ -217,7 +217,7 @@ class Handstand(go1_base.Go1Env):
     rewards = {
         k: v * self._config.reward_config.scales[k] for k, v in rewards.items()
     }
-    reward = sj.clip(sum(rewards.values()) * self.dt, 0.0, 10000.0)
+    reward = sj.clip(sum(rewards.values()) * self.dt, 0.0, 10000.0, softness=self.reward_softness)
 
     state.info["step"] += 1
     state.info["last_act"] = action
@@ -356,7 +356,7 @@ class Handstand(go1_base.Go1Env):
     return jp.square(normalized)
 
   def _reward_height(self, torso_height: jax.Array) -> jax.Array:
-    height = sj.min(jp.array([torso_height, self._z_des]))
+    height = sj.min(jp.array([torso_height, self._z_des]), softness=self.reward_softness)
     error = self._z_des - height
     return jp.exp(-error / 1.0)
 
@@ -365,7 +365,7 @@ class Handstand(go1_base.Go1Env):
         data.sensordata[self._mj_model.sensor_adr[sensorid]]
         for sensorid in self._feet_floor_found_sensor
     ])
-    return sj.any(sj.greater_st(feet_contact, 0.0), axis=-1)
+    return sj.any(sj.greater_st(feet_contact, 0.0, softness=self.reward_softness), axis=-1)
 
   def _cost_pose(self, qpos: jax.Array) -> jax.Array:
     return jp.sum(jp.square(qpos[self._joint_ids] - self._joint_pose))
@@ -376,7 +376,7 @@ class Handstand(go1_base.Go1Env):
   def _cost_energy(
       self, qvel: jax.Array, qfrc_actuator: jax.Array
   ) -> jax.Array:
-    return jp.sum(sj.abs(qvel) * sj.abs(qfrc_actuator))
+    return jp.sum(sj.abs(qvel, softness=self.reward_softness) * sj.abs(qfrc_actuator, softness=self.reward_softness))
 
   def _cost_action_rate(
       self, act: jax.Array, info: dict[str, Any]
@@ -384,8 +384,8 @@ class Handstand(go1_base.Go1Env):
     return jp.sum(jp.square(act - info["last_act"]))
 
   def _cost_joint_pos_limits(self, qpos: jax.Array) -> jax.Array:
-    out_of_limits = sj.relu(self._soft_lowers - qpos)
-    out_of_limits += sj.relu(qpos - self._soft_uppers)
+    out_of_limits = sj.relu(self._soft_lowers - qpos, softness=self.reward_softness)
+    out_of_limits += sj.relu(qpos - self._soft_uppers, softness=self.reward_softness)
     return jp.sum(out_of_limits)
 
   def _cost_dof_acc(self, qacc: jax.Array) -> jax.Array:

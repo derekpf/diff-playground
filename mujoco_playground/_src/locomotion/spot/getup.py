@@ -166,7 +166,7 @@ class Getup(spot_base.SpotEnv):
     rewards = {
         k: v * self._config.reward_config.scales[k] for k, v in rewards.items()
     }
-    reward = sj.clip(sum(rewards.values()) * self.dt, 0.0, 10000.0)
+    reward = sj.clip(sum(rewards.values()) * self.dt, 0.0, 10000.0, softness=self.reward_softness)
 
     # Bookkeeping.
     state.info["last_last_act"] = state.info["last_act"]
@@ -249,15 +249,15 @@ class Getup(spot_base.SpotEnv):
 
   def _is_upright(self, gravity: jax.Array, ori_tol: float = 0.01) -> jax.Array:
     ori_error = jp.sum(jp.square(self._up_vec - gravity))
-    return sj.less(ori_error, ori_tol)
+    return sj.less(ori_error, ori_tol, softness=self.reward_softness)
 
   def _is_at_desired_height(
       self, torso_height: jax.Array, pos_tol: float = 0.005
   ) -> jax.Array:
     height_error = sj.clip(
-        sj.div(self._z_des - torso_height, self._z_des), 0.0, 1.0
+        sj.div(self._z_des - torso_height, self._z_des), 0.0, 1.0, softness=self.reward_softness
     )
-    return sj.less(height_error, pos_tol)
+    return sj.less(height_error, pos_tol, softness=self.reward_softness)
 
   def _reward_orientation(self, torso_zaxis: jax.Array) -> jax.Array:
     error = jp.sum(jp.square(self._up_vec - torso_zaxis))
@@ -265,7 +265,7 @@ class Getup(spot_base.SpotEnv):
 
   def _reward_torso_height(self, torso_height: jax.Array) -> jax.Array:
     error = sj.clip(
-        sj.div(self._z_des - torso_height, self._z_des), 0.0, 1.0
+        sj.div(self._z_des - torso_height, self._z_des), 0.0, 1.0, softness=self.reward_softness
     )
     return 1.0 - error
 
@@ -282,7 +282,7 @@ class Getup(spot_base.SpotEnv):
     return gate * rew
 
   def _cost_torques(self, torques: jax.Array) -> jax.Array:
-    return sj.norm(torques) + jp.sum(sj.abs(torques))
+    return sj.norm(torques) + jp.sum(sj.abs(torques, softness=self.reward_softness))
 
   def _cost_action_rate(
       self, act: jax.Array, info: dict[str, Any]

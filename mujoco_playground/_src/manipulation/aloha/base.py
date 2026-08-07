@@ -111,5 +111,5 @@ class AlohaEnv(mjx_env.MjxEnv):
         for sensorid in self._table_finger_found_sensor
     ]
     return sj.any(
-        sj.greater_st(jp.array(hand_table_collisions), 0.0), axis=-1
+        sj.greater_st(jp.array(hand_table_collisions), 0.0, softness=self.reward_softness), axis=-1
     )

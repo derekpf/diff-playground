@@ -266,9 +266,9 @@ class Joystick(mjx_env.MjxEnv):
     ])
     contact = contact_values > 0
     first_contact_reward = sj.logical_and(
-        sj.greater_st(state.info["feet_air_time"], 0.0),
+        sj.greater_st(state.info["feet_air_time"], 0.0, softness=self.reward_softness),
         sj.logical_or(
-            sj.greater_st(contact_values, 0.0), state.info["last_contact"]
+            sj.greater_st(contact_values, 0.0, softness=self.reward_softness), state.info["last_contact"]
         ),
     )
     state.info["feet_air_time"] += self.dt
@@ -284,7 +284,7 @@ class Joystick(mjx_env.MjxEnv):
     rewards = {
         k: v * self._config.reward_config.scales[k] for k, v in rewards.items()
     }
-    reward = sj.clip(sum(rewards.values()) * self.dt, 0.0, 10000.0)
+    reward = sj.clip(sum(rewards.values()) * self.dt, 0.0, 10000.0, softness=self.reward_softness)
 
     # Bookkeeping.
     state.info["last_act"] = action
@@ -420,7 +420,7 @@ class Joystick(mjx_env.MjxEnv):
 
   def _cost_torques(self, torques: jax.Array) -> jax.Array:
     # Penalize torques.
-    return sj.norm(torques) + jp.sum(sj.abs(torques))
+    return sj.norm(torques) + jp.sum(sj.abs(torques, softness=self.reward_softness))
 
   def _cost_action_rate(self, act: jax.Array, last_act: jax.Array) -> jax.Array:
     # Penalize changes in actions.
@@ -433,8 +433,8 @@ class Joystick(mjx_env.MjxEnv):
   ) -> jax.Array:
     # Penalize motion at zero commands.
     unit_cmd = sj.div(commands[:2], sj.norm(commands[:2]))
-    return jp.sum(sj.abs(joint_angles - self._default_pose)) * sj.less(
-        unit_cmd[1], 0.1
+    return jp.sum(sj.abs(joint_angles - self._default_pose, softness=self.reward_softness)) * sj.less(
+        unit_cmd[1], 0.1, softness=self.reward_softness
     )
 
   def _cost_termination(self, done: jax.Array, step: jax.Array) -> jax.Array:
@@ -446,7 +446,7 @@ class Joystick(mjx_env.MjxEnv):
     # Reward air time.
     cmd_norm = sj.norm(commands[:2])
     rew_air_time = jp.sum((air_time - 0.1) * first_contact)
-    rew_air_time *= sj.greater(cmd_norm, 0.05)  # No reward for zero commands.
+    rew_air_time *= sj.greater(cmd_norm, 0.05, softness=self.reward_softness)  # No reward for zero commands.
     return rew_air_time
 
   def _maybe_apply_perturbation(

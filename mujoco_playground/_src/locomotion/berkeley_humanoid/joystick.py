@@ -306,16 +306,16 @@ class Joystick(berkeley_humanoid_base.BerkeleyHumanoidEnv):
         for sensor_id in self._feet_floor_found_sensor
     ])
     contact = contact_values > 0
-    contact_reward = sj.greater_st(contact_values, 0.0)
+    contact_reward = sj.greater_st(contact_values, 0.0, softness=self.reward_softness)
     first_contact_reward = sj.logical_and(
-        sj.greater_st(state.info["feet_air_time"], 0.0),
+        sj.greater_st(state.info["feet_air_time"], 0.0, softness=self.reward_softness),
         sj.logical_or(contact_reward, state.info["last_contact"]),
     )
     state.info["feet_air_time"] += self.dt
     p_f = data.site_xpos[self._feet_site_id]
     p_fz = p_f[..., -1]
     state.info["swing_peak"] = sj.max(
-        jp.stack([state.info["swing_peak"], p_fz]), axis=0
+        jp.stack([state.info["swing_peak"], p_fz]), axis=0, softness=self.reward_softness
     )
 
     obs = self._get_obs(data, state.info, contact)
@@ -333,7 +333,7 @@ class Joystick(berkeley_humanoid_base.BerkeleyHumanoidEnv):
     rewards = {
         k: v * self._config.reward_config.scales[k] for k, v in rewards.items()
     }
-    reward = sj.clip(sum(rewards.values()) * self.dt, 0.0, 10000.0)
+    reward = sj.clip(sum(rewards.values()) * self.dt, 0.0, 10000.0, softness=self.reward_softness)
 
     state.info["push"] = push
     state.info["step"] += 1
@@ -554,12 +554,12 @@ class Joystick(berkeley_humanoid_base.BerkeleyHumanoidEnv):
   # Energy related rewards.
 
   def _cost_torques(self, torques: jax.Array) -> jax.Array:
-    return jp.sum(sj.abs(torques))
+    return jp.sum(sj.abs(torques, softness=self.reward_softness))
 
   def _cost_energy(
       self, qvel: jax.Array, qfrc_actuator: jax.Array
   ) -> jax.Array:
-    return jp.sum(sj.abs(qvel) * sj.abs(qfrc_actuator))
+    return jp.sum(sj.abs(qvel, softness=self.reward_softness) * sj.abs(qfrc_actuator, softness=self.reward_softness))
 
   def _cost_action_rate(
       self, act: jax.Array, last_act: jax.Array, last_last_act: jax.Array
@@ -571,8 +571,8 @@ class Joystick(berkeley_humanoid_base.BerkeleyHumanoidEnv):
   # Other rewards.
 
   def _cost_joint_pos_limits(self, qpos: jax.Array) -> jax.Array:
-    out_of_limits = sj.relu(self._soft_lowers - qpos)
-    out_of_limits += sj.relu(qpos - self._soft_uppers)
+    out_of_limits = sj.relu(self._soft_lowers - qpos, softness=self.reward_softness)
+    out_of_limits += sj.relu(qpos - self._soft_uppers, softness=self.reward_softness)
     return jp.sum(out_of_limits)
 
   def _cost_stand_still(
@@ -581,8 +581,8 @@ class Joystick(berkeley_humanoid_base.BerkeleyHumanoidEnv):
       qpos: jax.Array,
   ) -> jax.Array:
     cmd_norm = sj.norm(commands)
-    return jp.sum(sj.abs(qpos - self._default_pose)) * sj.less(
-        cmd_norm, 0.1
+    return jp.sum(sj.abs(qpos - self._default_pose, softness=self.reward_softness)) * sj.less(
+        cmd_norm, 0.1, softness=self.reward_softness
     )
 
   def _cost_termination(self, done: jax.Array) -> jax.Array:
@@ -597,15 +597,15 @@ class Joystick(berkeley_humanoid_base.BerkeleyHumanoidEnv):
       self, qpos: jax.Array, cmd: jax.Array
   ) -> jax.Array:
     cost = jp.sum(
-        sj.abs(qpos[self._hip_indices] - self._default_pose[self._hip_indices])
+        sj.abs(qpos[self._hip_indices] - self._default_pose[self._hip_indices], softness=self.reward_softness)
     )
-    cost *= sj.greater(sj.abs(cmd[1]), 0.1)
+    cost *= sj.greater(sj.abs(cmd[1], softness=self.reward_softness), 0.1, softness=self.reward_softness)
     return cost
 
   def _cost_joint_deviation_knee(self, qpos: jax.Array) -> jax.Array:
     return jp.sum(
         sj.abs(
-            qpos[self._knee_indices] - self._default_pose[self._knee_indices]
+            qpos[self._knee_indices] - self._default_pose[self._knee_indices], softness=self.reward_softness
         )
     )
 
@@ -631,7 +631,7 @@ class Joystick(berkeley_humanoid_base.BerkeleyHumanoidEnv):
     vel_norm = jp.sqrt(sj.norm(vel_xy, axis=-1))
     foot_pos = data.site_xpos[self._feet_site_id]
     foot_z = foot_pos[..., -1]
-    delta = sj.abs(foot_z - self._config.reward_config.max_foot_height)
+    delta = sj.abs(foot_z - self._config.reward_config.max_foot_height, softness=self.reward_softness)
     return jp.sum(delta * vel_norm)
 
   def _cost_feet_height(
@@ -656,9 +656,9 @@ class Joystick(berkeley_humanoid_base.BerkeleyHumanoidEnv):
   ) -> jax.Array:
     cmd_norm = sj.norm(commands)
     air_time = (air_time - threshold_min) * first_contact
-    air_time = air_time - sj.relu(air_time - (threshold_max - threshold_min))
+    air_time = air_time - sj.relu(air_time - (threshold_max - threshold_min), softness=self.reward_softness)
     reward = jp.sum(air_time)
-    reward *= sj.greater(cmd_norm, 0.1)  # No reward for zero commands.
+    reward *= sj.greater(cmd_norm, 0.1, softness=self.reward_softness)  # No reward for zero commands.
     return reward
 
   def _reward_feet_phase(
@@ -672,7 +672,7 @@ class Joystick(berkeley_humanoid_base.BerkeleyHumanoidEnv):
     del commands  # Unused.
     foot_pos = data.site_xpos[self._feet_site_id]
     foot_z = foot_pos[..., -1]
-    rz = gait.get_rz(phase, swing_height=foot_height)
+    rz = gait.get_rz(phase, swing_height=foot_height, softness=self.reward_softness)
     error = jp.sum(jp.square(foot_z - rz))
     reward = jp.exp(-error / 0.01)
     # TODO(kevin): Ensure no movement at 0 command.

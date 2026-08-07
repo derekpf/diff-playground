@@ -238,16 +238,16 @@ class Joystick(spot_base.SpotEnv):
         for sensor_id in self._feet_floor_found_sensor
     ])
     contact = contact_values > 0
-    contact_reward = sj.greater_st(contact_values, 0.0)
+    contact_reward = sj.greater_st(contact_values, 0.0, softness=self.reward_softness)
     first_contact_reward = sj.logical_and(
-        sj.greater_st(state.info["feet_air_time"], 0.0),
+        sj.greater_st(state.info["feet_air_time"], 0.0, softness=self.reward_softness),
         sj.logical_or(contact_reward, state.info["last_contact"]),
     )
     state.info["feet_air_time"] += self.dt
     p_f = data.site_xpos[self._feet_site_id]
     p_fz = p_f[..., -1]
     state.info["swing_peak"] = sj.max(
-        jp.stack([state.info["swing_peak"], p_fz]), axis=0
+        jp.stack([state.info["swing_peak"], p_fz]), axis=0, softness=self.reward_softness
     )
 
     obs = self._get_obs(data, state.info, noise_rng)
@@ -265,7 +265,7 @@ class Joystick(spot_base.SpotEnv):
     rewards = {
         k: v * self._config.reward_config.scales[k] for k, v in rewards.items()
     }
-    reward = sj.clip(sum(rewards.values()) * self.dt, 0.0, 10000.0)
+    reward = sj.clip(sum(rewards.values()) * self.dt, 0.0, 10000.0, softness=self.reward_softness)
 
     state.info["last_last_act"] = state.info["last_act"]
     state.info["last_act"] = action
@@ -441,7 +441,7 @@ class Joystick(spot_base.SpotEnv):
     cost = jp.sum(jp.square(joint_angles - self._default_pose) * self._weights)
     cmd_norm = sj.norm(commands)
     weight = sj.where(
-        sj.less(cmd_norm, 0.01),
+        sj.less(cmd_norm, 0.01, softness=self.reward_softness),
         -10.0,
         0.0,
     )
@@ -485,13 +485,13 @@ class Joystick(spot_base.SpotEnv):
 
   def _cost_torques(self, torques: jax.Array) -> jax.Array:
     # Penalize torques.
-    return sj.norm(torques) + jp.sum(sj.abs(torques))
+    return sj.norm(torques) + jp.sum(sj.abs(torques, softness=self.reward_softness))
 
   def _cost_energy(
       self, qvel: jax.Array, qfrc_actuator: jax.Array
   ) -> jax.Array:
     # Penalize energy consumption.
-    return jp.sum(sj.abs(qvel) * sj.abs(qfrc_actuator))
+    return jp.sum(sj.abs(qvel, softness=self.reward_softness) * sj.abs(qfrc_actuator, softness=self.reward_softness))
 
   def _cost_action_rate(
       self, act: jax.Array, info: dict[str, Any]
@@ -522,7 +522,7 @@ class Joystick(spot_base.SpotEnv):
     foot_z = foot_pos[..., -1]
     # TODO(kevin): Desired foot height should be proportional to the command.
     # desired_z = 0.05 + jp.linalg.norm(command[:2]) * 0.1
-    delta = sj.abs(foot_z - self._config.reward_config.max_foot_height)
+    delta = sj.abs(foot_z - self._config.reward_config.max_foot_height, softness=self.reward_softness)
     return jp.sum(delta * vel_norm)
 
   def _cost_feet_height(
@@ -534,7 +534,7 @@ class Joystick(spot_base.SpotEnv):
     cmd_norm = sj.norm(command)
     error = sj.div(swing_peak, self._config.reward_config.max_foot_height) - 1.0
     cost = jp.sum(jp.square(error) * first_contact)
-    cost *= sj.greater_equal(cmd_norm, 0.01)  # No penalty for zero commands.
+    cost *= sj.greater_equal(cmd_norm, 0.01, softness=self.reward_softness)  # No penalty for zero commands.
     return cost
 
   def _reward_feet_air_time(
@@ -543,14 +543,14 @@ class Joystick(spot_base.SpotEnv):
     # Reward air time.
     cmd_norm = sj.norm(commands)
     rew_air_time = jp.sum((air_time - 0.1) * first_contact)
-    rew_air_time *= sj.greater_equal(cmd_norm, 0.01)  # No reward for zero commands.
+    rew_air_time *= sj.greater_equal(cmd_norm, 0.01, softness=self.reward_softness)  # No reward for zero commands.
     return rew_air_time
 
   def _cost_feet_phase(self, data: mjx.Data, phase: jax.Array) -> jax.Array:
     foot_pos = data.site_xpos[self._feet_site_id]
     foot_z = foot_pos[..., -1]
     rz = gait.get_rz(
-        phase, swing_height=self._config.reward_config.max_foot_height
+        phase, swing_height=self._config.reward_config.max_foot_height, softness=self.reward_softness
     )
     return jp.sum(jp.square(foot_z - rz))
 

@@ -341,7 +341,7 @@ class JoystickGaitTracking(spot_base.SpotEnv):
     # Reward for tracking the desired foot height.
     foot_pos = data.site_xpos[self._feet_site_id]
     foot_z = foot_pos[..., -1]
-    rz = gait.get_rz(phase, swing_height=foot_height)
+    rz = gait.get_rz(phase, swing_height=foot_height, softness=self.reward_softness)
     error = jp.sum(jp.square(foot_z - rz))
     return jp.exp(-error / 0.1)
 
@@ -371,7 +371,7 @@ class JoystickGaitTracking(spot_base.SpotEnv):
   def _cost_lin_vel_z(self, global_linvel, gait: jax.Array) -> jax.Array:  # pylint: disable=redefined-outer-name
     # Penalize z axis base linear velocity unless pronk or bound.
     cost = jp.square(global_linvel[2])
-    return cost * sj.greater_st(gait, 2)
+    return cost * sj.greater_st(gait, 2, softness=self.reward_softness)
 
   def _cost_ang_vel_xy(self, global_angvel) -> jax.Array:
     # Penalize xy axes base angular velocity.

@@ -15,58 +15,27 @@
 """Project-wide softjax configuration."""
 
 import functools
-import math
+from typing import Final
 
 import softjax as _softjax
 
-SOFTNESS = 0.01
-
-
-def set_global_softness(softness: float) -> None:
-  """Sets the finite, positive softness used by project softjax wrappers.
-
-  Args:
-    softness: A finite value strictly greater than zero. The value is
-      converted to ``float`` before it is stored.
-
-  Raises:
-    ValueError: If ``softness`` cannot be converted to a finite, positive
-      value.
-  """
-  try:
-    softness = float(softness)
-  except (TypeError, ValueError, OverflowError) as error:
-    raise ValueError(
-        "softness must be a finite value greater than zero"
-    ) from error
-  if not math.isfinite(softness) or softness <= 0.0:
-    raise ValueError("softness must be a finite value greater than zero")
-
-  global SOFTNESS
-  SOFTNESS = softness
+_DEFAULT_SOFTNESS: Final[float] = 0.01
 
 
 def _with_softness(fn, softness_position):
-  """Binds the softness argument of a softjax function to ``SOFTNESS``."""
+  """Adds the project default when a softness value is not provided."""
 
   @functools.wraps(fn)
   def wrapped(*args, **kwargs):
-    if len(args) > softness_position:
-      args = (
-          *args[:softness_position],
-          SOFTNESS,
-          *args[softness_position + 1 :],
-      )
-      kwargs.pop("softness", None)
-    else:
-      kwargs["softness"] = SOFTNESS
+    if len(args) <= softness_position and "softness" not in kwargs:
+      kwargs["softness"] = _DEFAULT_SOFTNESS
     return fn(*args, **kwargs)
 
   return wrapped
 
 
-# Keep the external softjax argument order while forcing the project value,
-# including when callers provide softness positionally or by keyword.
+# Keep the external softjax argument order while providing the project default
+# when callers omit softness.
 abs = _with_softness(_softjax.abs, 1)
 clip = _with_softness(_softjax.clip, 3)
 greater = _with_softness(_softjax.greater, 2)

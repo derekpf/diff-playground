@@ -150,7 +150,7 @@ class Spin(mjx_env.MjxEnv):
       metrics: dict[str, Any],
   ) -> jax.Array:
     del metrics, action, info  # Unused.
-    return sj.less_equal(self._hinge_velocity(data), -_SPIN_VELOCITY)
+    return sj.less_equal(self._hinge_velocity(data), -_SPIN_VELOCITY, softness=self.reward_softness)
 
   def _hinge_velocity(self, data: mjx.Data) -> jax.Array:
     return mjx_env.get_sensor_data(self.mj_model, data, "hinge_velocity")[0]
@@ -301,7 +301,7 @@ class Turn(mjx_env.MjxEnv):
       metrics: dict[str, Any],
   ) -> jax.Array:
     del metrics, action, info  # Unused.
-    return sj.less_equal_st(self._dist_to_target(data), 0.0)
+    return sj.less_equal_st(self._dist_to_target(data), 0.0, softness=self.reward_softness)
 
   def _hinge_velocity(self, data: mjx.Data) -> jax.Array:
     return mjx_env.get_sensor_data(self.mj_model, data, "hinge_velocity")[0]

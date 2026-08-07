@@ -24,7 +24,6 @@ from mujoco_playground._src.mjx_env import MjxEnv
 from mujoco_playground._src.mjx_env import render_array
 from mujoco_playground._src.mjx_env import State
 from mujoco_playground._src.mjx_env import step
-from mujoco_playground._src.softjax import set_global_softness
 
 # pylint: enable=g-importing-member
 
@@ -35,7 +34,6 @@ __all__ = [
     "MjxEnv",
     "registry",
     "render_array",
-    "set_global_softness",
     "State",
     "step",
     "wrapper",

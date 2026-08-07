@@ -251,7 +251,7 @@ class CubeReorient(leap_hand_base.LeapHandEnv):
     )
     data = data.replace(mocap_quat=jp.array([goal_quat]))
     state.metrics["reward/success"] = success.astype(float)
-    success_reward = sj.less(ori_error, self._config.success_threshold)
+    success_reward = sj.less(ori_error, self._config.success_threshold, softness=self.reward_softness)
     reward += success_reward * self._config.reward_config.success_reward
 
     # Update info and metrics.
@@ -391,7 +391,7 @@ class CubeReorient(leap_hand_base.LeapHandEnv):
     palm_pos = self.get_palm_position(data)
     cube_pose_mse = sj.norm(palm_pos - cube_pos)
     cube_pos_reward = reward.tolerance(
-        cube_pose_mse, (0, 0.02), margin=0.05, sigmoid="linear"
+        cube_pose_mse, (0, 0.02), margin=0.05, sigmoid="linear", softness=self.reward_softness
     )
 
     hand_pose_reward = jp.sum(
@@ -415,18 +415,18 @@ class CubeReorient(leap_hand_base.LeapHandEnv):
   def _cost_energy(
       self, qvel: jax.Array, qfrc_actuator: jax.Array
   ) -> jax.Array:
-    return jp.sum(sj.abs(qvel) * sj.abs(qfrc_actuator))
+    return jp.sum(sj.abs(qvel, softness=self.reward_softness) * sj.abs(qfrc_actuator, softness=self.reward_softness))
 
   def _cube_orientation_error(self, data: mjx.Data):
     cube_ori = self.get_cube_orientation(data)
     cube_goal_ori = self.get_cube_goal_orientation(data)
     quat_diff = math.quat_mul(cube_ori, math.quat_inv(cube_goal_ori))
     quat_diff = sj.div(quat_diff, sj.norm(quat_diff))
-    return 2.0 * sj.arcsin(sj.clip(sj.norm(quat_diff[1:]), 0.0, 1.0))
+    return 2.0 * sj.arcsin(sj.clip(sj.norm(quat_diff[1:]), 0.0, 1.0, softness=self.reward_softness))
 
   def _reward_cube_orientation(self, data: mjx.Data) -> jax.Array:
     ori_error = self._cube_orientation_error(data)
-    return reward.tolerance(ori_error, (0, 0.2), margin=jp.pi, sigmoid="linear")
+    return reward.tolerance(ori_error, (0, 0.2), margin=jp.pi, sigmoid="linear", softness=self.reward_softness)
 
   def _cost_action_rate(
       self, act: jax.Array, last_act: jax.Array, last_last_act: jax.Array

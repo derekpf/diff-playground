@@ -129,12 +129,12 @@ class PointMass(mjx_env.MjxEnv):
     near_target = reward.tolerance(
         mass_to_target_dist,
         bounds=(0, self._target_size),
-        margin=self._target_size,
+        margin=self._target_size, softness=self.reward_softness,
     )
     metrics["reward/near_target"] = near_target
 
     control_reward = reward.tolerance(
-        action, margin=1, value_at_margin=0, sigmoid="quadratic"
+        action, margin=1, value_at_margin=0, sigmoid="quadratic", softness=self.reward_softness
     ).mean()
     small_control = (control_reward + 4) / 5
     metrics["reward/small_control"] = small_control

@@ -124,7 +124,7 @@ class Balance(mjx_env.MjxEnv):
     return reward.tolerance(
         self._to_target(data),
         bounds=(0.0, self._target_radius),
-        margin=self._margin,
+        margin=self._margin, softness=self.reward_softness,
     )
 
   def _horizontal(self, data: mjx.Data) -> jax.Array:

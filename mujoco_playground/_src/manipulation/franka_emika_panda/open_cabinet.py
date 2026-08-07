@@ -153,7 +153,7 @@ class PandaOpenCabinet(panda.PandaBase):
         k: v * self._config.reward_config.scales[k]
         for k, v in raw_rewards.items()
     }
-    reward = sj.clip(sum(rewards.values()), -1e4, 1e4)
+    reward = sj.clip(sum(rewards.values()), -1e4, 1e4, softness=self.reward_softness)
 
     box_pos = data.xpos[self._obj_body]
     out_of_bounds = jp.any(jp.abs(box_pos) > 1.0)
@@ -192,15 +192,15 @@ class PandaOpenCabinet(panda.PandaBase):
         for sensor_id in self._barrier_hand_found_sensor
     ]
     barrier_collision = sj.any(
-        sj.greater_st(jp.array(hand_barrier_collision), 0.0), axis=-1
+        sj.greater_st(jp.array(hand_barrier_collision), 0.0, softness=self.reward_softness), axis=-1
     )
     no_barrier_collision = 1 - barrier_collision
 
     info["reached_box"] = sj.max(
         jp.stack([
             info["reached_box"],
-            sj.less(sj.norm(box_pos - gripper_pos), 1.0 * 0.012),
-        ])
+            sj.less(sj.norm(box_pos - gripper_pos), 1.0 * 0.012, softness=self.reward_softness),
+        ]), softness=self.reward_softness
     )
 
     return {

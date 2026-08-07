@@ -205,7 +205,7 @@ class Joystick(op3_base.Op3Env):
     rewards = {
         k: v * self._config.reward_config.scales[k] for k, v in rewards.items()
     }
-    reward = sj.clip(sum(rewards.values()) * self.dt, 0.0, 10000.0)
+    reward = sj.clip(sum(rewards.values()) * self.dt, 0.0, 10000.0, softness=self.reward_softness)
 
     # Bookkeeping.
     state.info["motor_targets"] = motor_targets
@@ -342,13 +342,13 @@ class Joystick(op3_base.Op3Env):
 
   def _cost_torques(self, torques: jax.Array) -> jax.Array:
     # Penalize torques.
-    return sj.norm(torques) + jp.sum(sj.abs(torques))
+    return sj.norm(torques) + jp.sum(sj.abs(torques, softness=self.reward_softness))
 
   def _cost_energy(
       self, qvel: jax.Array, qfrc_actuator: jax.Array
   ) -> jax.Array:
     # Penalize energy consumption.
-    return jp.sum(sj.abs(qvel) * sj.abs(qfrc_actuator))
+    return jp.sum(sj.abs(qvel, softness=self.reward_softness) * sj.abs(qfrc_actuator, softness=self.reward_softness))
 
   def _cost_action_rate(
       self, act: jax.Array, last_act: jax.Array, last_last_act: jax.Array
@@ -368,7 +368,7 @@ class Joystick(op3_base.Op3Env):
     del global_linvel, ang_vel  # Unused.
     cmd_norm = sj.norm(commands)
     penalty = jp.sum(jp.square(action))
-    return penalty * sj.less(cmd_norm, 0.1)
+    return penalty * sj.less(cmd_norm, 0.1, softness=self.reward_softness)
     # penalty = jp.sum(jp.square(global_linvel[:2]))
     # cmd_norm = jp.linalg.norm(commands[:2])
     # cost_linvel = penalty * (cmd_norm < 0.1)
@@ -394,8 +394,8 @@ class Joystick(op3_base.Op3Env):
         for sensor_id in self._right_feet_floor_found_sensor
     ])
     feet_contact = jp.hstack([
-        sj.any(sj.greater_st(left_contact_values, 0.0)),
-        sj.any(sj.greater_st(right_contact_values, 0.0)),
+        sj.any(sj.greater_st(left_contact_values, 0.0, softness=self.reward_softness)),
+        sj.any(sj.greater_st(right_contact_values, 0.0, softness=self.reward_softness)),
     ])
     return jp.sum(vel_xy_norm_sq * feet_contact)
 

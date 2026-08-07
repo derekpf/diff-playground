@@ -171,7 +171,7 @@ class HandOver(aloha_base.AlohaEnv):
     # Reward progress. Clip at zero to not penalize mistakes like dropping
     # during exploration.
     reward = sj.max(
-        jp.stack([potential - state.info['prev_potential'], jp.zeros_like(potential)])
+        jp.stack([potential - state.info['prev_potential'], jp.zeros_like(potential)]), softness=self.reward_softness
     )
 
     box_pos = data.xpos[self._box_body]
@@ -185,7 +185,7 @@ class HandOver(aloha_base.AlohaEnv):
     reward += 0.02 * potential * condition
 
     state.info['prev_potential'] = sj.max(
-        jp.stack([potential, state.info['prev_potential']])
+        jp.stack([potential, state.info['prev_potential']]), softness=self.reward_softness
     )
     reward = sj.where(sj.logical_not(newly_reset), reward, 0.0)
 
@@ -196,7 +196,7 @@ class HandOver(aloha_base.AlohaEnv):
     )
     dropped = (box_pos[2] < 0.05) & state.info['episode_picked']
     dropped_reward = sj.logical_and(
-        sj.less(box_pos[2], 0.05), state.info['episode_picked']
+        sj.less(box_pos[2], 0.05, softness=self.reward_softness), state.info['episode_picked']
     )
     reward += dropped_reward * -0.1  # Small penalty.
 
@@ -232,8 +232,8 @@ class HandOver(aloha_base.AlohaEnv):
     l_gripper = data.site_xpos[self._left_gripper_site]
     r_gripper = data.site_xpos[self._right_gripper_site]
 
-    pre = sj.less(box[0], self._left_thresh)
-    past = sj.greater_equal(box[0], self._right_thresh)
+    pre = sj.less(box[0], self._left_thresh, softness=self.reward_softness)
+    past = sj.greater_equal(box[0], self._right_thresh, softness=self.reward_softness)
     btwn = (1 - pre) * (1 - past)
 
     #### Gripper Box
@@ -247,7 +247,7 @@ class HandOver(aloha_base.AlohaEnv):
     box_handover = distance(box, self._handover_pos)
     # Maintain this term after RH takes box away.
     hand_handover = distance(l_gripper, self._handover_pos) * past
-    box_handover = sj.max(jp.stack([box_handover, hand_handover]))
+    box_handover = sj.max(jp.stack([box_handover, hand_handover]), softness=self.reward_softness)
 
     #### Bring box to target
     box_target = distance(info['target_pos'], box) * (r_rg + r_rg_bias)

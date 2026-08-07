@@ -174,7 +174,7 @@ class Joystick(h1_base.H1Env):
     rewards = {
         k: v * self._config.reward_config.scales[k] for k, v in rewards.items()
     }
-    reward = sj.clip(sum(rewards.values()) * self.dt, 0.0, 10000.0)
+    reward = sj.clip(sum(rewards.values()) * self.dt, 0.0, 10000.0, softness=self.reward_softness)
 
     # Bookkeeping.
     state.info["last_act"] = action
@@ -306,7 +306,7 @@ class Joystick(h1_base.H1Env):
 
   def _cost_torques(self, torques: jax.Array) -> jax.Array:
     # Penalize torques.
-    return sj.norm(torques) + jp.sum(sj.abs(torques))
+    return sj.norm(torques) + jp.sum(sj.abs(torques, softness=self.reward_softness))
 
   def _cost_action_rate(self, act: jax.Array, last_act: jax.Array) -> jax.Array:
     # Penalize changes in actions.
@@ -319,8 +319,8 @@ class Joystick(h1_base.H1Env):
   ) -> jax.Array:
     # Penalize motion at zero commands.
     unit_cmd = sj.div(commands[:2], sj.norm(commands[:2]))
-    return jp.sum(sj.abs(joint_angles - self._default_pose)) * sj.less(
-        unit_cmd[1], 0.1
+    return jp.sum(sj.abs(joint_angles - self._default_pose, softness=self.reward_softness)) * sj.less(
+        unit_cmd[1], 0.1, softness=self.reward_softness
     )
 
   def _cost_termination(self, done: jax.Array, step: jax.Array) -> jax.Array:
@@ -339,8 +339,8 @@ class Joystick(h1_base.H1Env):
         for sensorid in self._right_foot_floor_found_sensor
     ])
     feet_contact = jp.hstack([
-        sj.any(sj.greater_st(left_contact_values, 0.0)),
-        sj.any(sj.greater_st(right_contact_values, 0.0)),
+        sj.any(sj.greater_st(left_contact_values, 0.0, softness=self.reward_softness)),
+        sj.any(sj.greater_st(right_contact_values, 0.0, softness=self.reward_softness)),
     ])
     return jp.sum(vel_xy_norm_sq * feet_contact)
 

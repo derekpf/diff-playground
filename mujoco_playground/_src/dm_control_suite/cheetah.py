@@ -135,7 +135,7 @@ class Run(mjx_env.MjxEnv):
         bounds=(_RUN_SPEED, float("inf")),
         margin=_RUN_SPEED,
         value_at_margin=0,
-        sigmoid="linear",
+        sigmoid="linear", softness=self.reward_softness,
     )
 
   @property

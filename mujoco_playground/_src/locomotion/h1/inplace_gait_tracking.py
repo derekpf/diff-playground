@@ -367,7 +367,7 @@ class InplaceGaitTracking(h1_base.H1Env):
     # Reward for tracking the desired foot height.
     foot_pos = data.site_xpos[self._feet_site_id]
     foot_z = foot_pos[..., -1]
-    rz = gait.get_rz(phase, swing_height=foot_height)
+    rz = gait.get_rz(phase, swing_height=foot_height, softness=self.reward_softness)
     error = jp.sum(jp.square(foot_z - rz))
     return jp.exp(-error / 0.1)
 

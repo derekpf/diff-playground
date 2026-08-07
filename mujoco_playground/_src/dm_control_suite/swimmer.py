@@ -213,7 +213,7 @@ class Swim(mjx_env.MjxEnv):
         self._nose_to_target_dist(data),
         bounds=(0, self._target_size),
         margin=5 * self._target_size,
-        sigmoid="long_tail",
+        sigmoid="long_tail", softness=self.reward_softness,
     )
 
   def _nose_to_target(self, data: mjx.Data) -> jax.Array:

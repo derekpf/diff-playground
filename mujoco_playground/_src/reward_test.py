@@ -14,15 +14,13 @@
 # ==============================================================================
 """Tests for smooth reward primitives."""
 
-from absl.testing import absltest
-from absl.testing import parameterized
 import jax
 import jax.numpy as jp
 import numpy as np
+from absl.testing import absltest, parameterized
 
 from mujoco_playground._src import reward
 from mujoco_playground._src import softjax as sj
-
 
 _SIGMOIDS = (
     "gaussian",
@@ -47,16 +45,14 @@ class RewardTest(parameterized.TestCase):
   def test_tolerance_is_one_at_inclusive_boundaries(
       self, bounds, margin, boundary_values
   ):
-    original_softness = sj.SOFTNESS
-    try:
-      for softness in (0.1, 0.05, 0.01, 0.005, 0.001):
-        sj.SOFTNESS = softness
-        values = reward.tolerance(
-            jp.array(boundary_values), bounds=bounds, margin=margin
-        )
-        np.testing.assert_allclose(values, 1.0)
-    finally:
-      sj.SOFTNESS = original_softness
+    for softness in (0.1, 0.05, 0.01, 0.005, 0.001):
+      values = reward.tolerance(
+          jp.array(boundary_values),
+          bounds=bounds,
+          margin=margin,
+          softness=softness,
+      )
+      np.testing.assert_allclose(values, 1.0)
 
   @parameterized.parameters(0.0, 0.5)
   def test_tolerance_is_finite_and_differentiable(self, margin):

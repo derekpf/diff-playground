@@ -280,11 +280,11 @@ class CubeRotateZAxis(aero_hand_base.AeroHandEnv):
       self, qvel: jax.Array, qfrc_actuator: jax.Array
   ) -> jax.Array:
     return jp.sum(
-        sj.abs(qvel) * sj.abs(qfrc_actuator)
+        sj.abs(qvel, softness=self.reward_softness) * sj.abs(qfrc_actuator, softness=self.reward_softness)
     )  # Change: only use the control joints
 
   def _cost_linvel(self, cube_linvel: jax.Array) -> jax.Array:
-    return jp.sum(sj.abs(cube_linvel), axis=-1)
+    return jp.sum(sj.abs(cube_linvel, softness=self.reward_softness), axis=-1)
 
   def _reward_angvel(
       self, cube_angvel: jax.Array, cube_pos_error: jax.Array
