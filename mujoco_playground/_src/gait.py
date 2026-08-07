@@ -35,7 +35,7 @@ from mujoco_playground._src import softjax as sj
 def get_rz(
     phi: Union[jax.Array, float],
     swing_height: Union[jax.Array, float] = 0.08,
-    softness: float = 0.01,
+    softness: float = 0.0,
 ) -> jax.Array:
   def cubic_bezier_interpolation(y_start, y_end, x):
     y_diff = y_end - y_start

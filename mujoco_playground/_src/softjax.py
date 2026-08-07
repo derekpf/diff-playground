@@ -15,20 +15,35 @@
 """Project-wide softjax configuration."""
 
 import functools
+import numbers
 from typing import Final
 
 import softjax as _softjax
 
-_DEFAULT_SOFTNESS: Final[float] = 0.01
+_DEFAULT_SOFTNESS: Final[float] = 0.0
 
 
 def _with_softness(fn, softness_position):
-  """Adds the project default when a softness value is not provided."""
+  """Adds the project default and maps zero softness to hard mode."""
+
+  mode_position = softness_position + 1
 
   @functools.wraps(fn)
   def wrapped(*args, **kwargs):
     if len(args) <= softness_position and "softness" not in kwargs:
       kwargs["softness"] = _DEFAULT_SOFTNESS
+    softness = (
+        args[softness_position]
+        if len(args) > softness_position
+        else kwargs.get("softness")
+    )
+    if (
+        isinstance(softness, numbers.Real)
+        and softness == 0.0
+        and len(args) <= mode_position
+        and "mode" not in kwargs
+    ):
+      kwargs["mode"] = "hard"
     return fn(*args, **kwargs)
 
   return wrapped

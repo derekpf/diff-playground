@@ -63,7 +63,7 @@ class SoftjaxTest(absltest.TestCase):
   def test_softness(self):
     self.assertNotIn("reward_softness", MjxEnv.__dict__)
     env = _SoftnessEnv()
-    self.assertEqual(env.reward_softness, 0.01)
+    self.assertEqual(env.reward_softness, 0.0)
 
   def test_reward_softness_is_instance_scoped(self):
     first = _SoftnessEnv()
@@ -71,12 +71,12 @@ class SoftjaxTest(absltest.TestCase):
     first.reward_softness = 0.1
 
     self.assertEqual(first.reward_softness, 0.1)
-    self.assertEqual(second.reward_softness, 0.01)
+    self.assertEqual(second.reward_softness, 0.0)
     np.testing.assert_allclose(
         jax.jit(first.reward)(0.0), 0.1 * np.log(2.0), rtol=1e-5
     )
     np.testing.assert_allclose(
-        jax.jit(second.reward)(0.0), 0.01 * np.log(2.0), rtol=1e-5
+        jax.jit(second.reward)(0.0), 0.0, rtol=1e-5
     )
 
   def test_wrapper_delegates_reward_softness(self):
@@ -90,7 +90,8 @@ class SoftjaxTest(absltest.TestCase):
     )
 
   def test_standalone_wrappers_use_the_default_softness(self):
-    np.testing.assert_allclose(sj.relu(0.0), 0.01 * np.log(2.0), rtol=1e-5)
+    np.testing.assert_allclose(sj.relu(0.0), 0.0, rtol=1e-5)
+    np.testing.assert_allclose(sj.relu(0.0, 0.0), 0.0, rtol=1e-5)
 
   def test_explicit_softness_is_honored(self):
     np.testing.assert_allclose(
@@ -100,7 +101,7 @@ class SoftjaxTest(absltest.TestCase):
 
   def test_clip_at_lower_bound(self):
     np.testing.assert_allclose(
-        sj.clip(jp.array(0.0), 0.0, 10000.0), 0.00693147, rtol=1e-5
+        sj.clip(jp.array(0.0), 0.0, 10000.0), 0.0, rtol=1e-5
     )
     np.testing.assert_allclose(
         sj.clip(jp.array(0.0), 0.0, 10000.0, softness=0.1),
@@ -109,10 +110,10 @@ class SoftjaxTest(absltest.TestCase):
     )
 
   def test_abs(self):
-    np.testing.assert_allclose(sj.abs(0.01), 0.00462117, rtol=1e-5)
+    np.testing.assert_allclose(sj.abs(0.01), 0.01, rtol=1e-5)
 
   def test_comparisons(self):
-    expected = 0.731059
+    expected = 1.0
     np.testing.assert_allclose(sj.greater(0.01, 0.0), expected, rtol=1e-5)
     np.testing.assert_allclose(sj.greater_equal(0.01, 0.0), expected, rtol=1e-5)
     np.testing.assert_allclose(sj.less(0.0, 0.01), expected, rtol=1e-5)
@@ -127,10 +128,12 @@ class SoftjaxTest(absltest.TestCase):
     )
     for comparison, expected in comparisons:
       with self.subTest(comparison=comparison.__name__):
-        values = comparison(jp.array([-1.0, 0.0, 1.0]), 0.0)
+        values = comparison(
+            jp.array([-1.0, 0.0, 1.0]), 0.0, softness=0.01
+        )
         np.testing.assert_allclose(values, expected)
         _, gradient = jax.jvp(
-            lambda x: comparison(x, 0.0),
+            lambda x: comparison(x, 0.0, softness=0.01),
             (jp.array(0.0),),
             (jp.array(1.0),),
         )
@@ -167,14 +170,14 @@ class SoftjaxTest(absltest.TestCase):
     np.testing.assert_allclose(sj.max(values), 0.01, rtol=1e-5)
     np.testing.assert_allclose(sj.min(values), 0.0, atol=1e-5)
     np.testing.assert_allclose(
-        sj.any(sj.greater(jp.zeros(4), 0.0)), 0.9375, rtol=1e-5
+        sj.any(sj.greater(jp.zeros(4), 0.0)), 0.0, rtol=1e-5
     )
     np.testing.assert_allclose(
         sj.any(sj.greater_st(jp.zeros(4), 0.0)), 0.0, atol=1e-5
     )
 
   def test_relu(self):
-    np.testing.assert_allclose(sj.relu(0.0), 0.00693147, rtol=1e-5)
+    np.testing.assert_allclose(sj.relu(0.0), 0.0, rtol=1e-5)
 
   def test_modes_are_forwarded(self):
     self.assertEqual(sj.clip(0.0, 0.0, 10000.0, mode="hard"), 0.0)

@@ -58,7 +58,11 @@ class RewardTest(parameterized.TestCase):
   def test_tolerance_is_finite_and_differentiable(self, margin):
     def objective(x):
       return reward.tolerance(
-          x, bounds=(-0.2, 0.2), margin=margin, sigmoid="gaussian"
+          x,
+          bounds=(-0.2, 0.2),
+          margin=margin,
+          sigmoid="gaussian",
+          softness=0.01,
       ).sum()
 
     values, gradients = jax.jit(jax.value_and_grad(objective))(
@@ -78,7 +82,11 @@ class RewardTest(parameterized.TestCase):
   def test_sigmoids_are_finite_and_differentiable(self, sigmoid):
     def objective(x):
       return reward.tolerance(
-          x, bounds=(-0.2, 0.2), margin=0.5, sigmoid=sigmoid
+          x,
+          bounds=(-0.2, 0.2),
+          margin=0.5,
+          sigmoid=sigmoid,
+          softness=0.01,
       ).sum()
 
     values, gradients = jax.jit(jax.value_and_grad(objective))(
@@ -90,25 +98,35 @@ class RewardTest(parameterized.TestCase):
 
   def test_soft_primitives_are_finite_at_boundaries(self):
     def objective(x):
+      softness = 0.01
       vector = jp.stack([x, jp.zeros_like(x)])
       comparisons = sj.logical_and(
-          sj.greater_equal(x, -0.2), sj.less_equal(x, 0.2)
+          sj.greater_equal(x, -0.2, softness=softness),
+          sj.less_equal(x, 0.2, softness=softness),
       )
       gates = sj.logical_or(
-          sj.any(sj.greater(vector, 0.0), axis=0),
-          sj.all(sj.less(vector, 2.0), axis=0),
+          sj.any(sj.greater(vector, 0.0, softness=softness), axis=0),
+          sj.all(sj.less(vector, 2.0, softness=softness), axis=0),
       )
       return (
-          sj.abs(x)
+          sj.abs(x, softness=softness)
           + sj.norm(vector, axis=0)
           + sj.div(x, sj.norm(vector, axis=0))
-          + sj.clip(x, -0.5, 0.5)
-          + sj.min(jp.stack([x, 0.25 * jp.ones_like(x)]), axis=0)
-          + sj.max(jp.stack([x, -0.25 * jp.ones_like(x)]), axis=0)
+          + sj.clip(x, -0.5, 0.5, softness=softness)
+          + sj.min(
+              jp.stack([x, 0.25 * jp.ones_like(x)]),
+              axis=0,
+              softness=softness,
+          )
+          + sj.max(
+              jp.stack([x, -0.25 * jp.ones_like(x)]),
+              axis=0,
+              softness=softness,
+          )
           + sj.where(comparisons, x, -x)
           + gates
-          + sj.arcsin(sj.clip(x, -1.0, 1.0))
-          + sj.arccos(sj.clip(x, -1.0, 1.0))
+          + sj.arcsin(sj.clip(x, -1.0, 1.0, softness=softness))
+          + sj.arccos(sj.clip(x, -1.0, 1.0, softness=softness))
       ).sum()
 
     values, gradients = jax.jit(jax.value_and_grad(objective))(

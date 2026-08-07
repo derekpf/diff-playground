@@ -24,7 +24,7 @@ from mujoco_playground._src import softjax as sj
 _DEFAULT_VALUE_AT_MARGIN = 0.1
 
 
-def _sigmoids(x, value_at_1, sigmoid, softness=0.01):
+def _sigmoids(x, value_at_1, sigmoid, softness=0.0):
   if sigmoid in ("cosine", "linear", "quadratic"):
     if not 0 <= value_at_1 < 1:
       raise ValueError(
@@ -99,7 +99,7 @@ def tolerance(
     margin: float = 0.0,
     sigmoid: str = "gaussian",
     value_at_margin: float = _DEFAULT_VALUE_AT_MARGIN,
-    softness: float = 0.01,
+    softness: float = 0.0,
 ) -> jp.ndarray:
   """Returns 1 when `x` falls inside the bounds, between 0 and 1 otherwise.
 
