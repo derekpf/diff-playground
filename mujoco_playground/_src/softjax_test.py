@@ -57,13 +57,23 @@ class _SoftnessEnv(MjxEnv):
   def reward(self, value):
     return sj.relu(value, softness=self.reward_softness)
 
+  def comparison_reward(self, value):
+    return sj.greater_st(
+        value,
+        0.0,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
+
 
 class SoftjaxTest(absltest.TestCase):
 
   def test_softness(self):
     self.assertNotIn("reward_softness", MjxEnv.__dict__)
+    self.assertNotIn("reward_st_enable", MjxEnv.__dict__)
     env = _SoftnessEnv()
     self.assertEqual(env.reward_softness, 0.0)
+    self.assertFalse(env.reward_st_enable)
 
   def test_reward_softness_is_instance_scoped(self):
     first = _SoftnessEnv()
@@ -88,6 +98,55 @@ class SoftjaxTest(absltest.TestCase):
     np.testing.assert_allclose(
         wrapped.reward(0.0), 0.1 * np.log(2.0), rtol=1e-5
     )
+
+  def test_reward_st_enable_is_instance_scoped(self):
+    first = _SoftnessEnv()
+    second = _SoftnessEnv()
+    first.reward_st_enable = True
+
+    self.assertTrue(first.reward_st_enable)
+    self.assertFalse(second.reward_st_enable)
+
+  def test_wrapper_delegates_reward_st_enable(self):
+    env = _SoftnessEnv()
+    wrapped = wrapper.Wrapper(env)
+
+    self.assertFalse(wrapped.reward_st_enable)
+    wrapped.reward_st_enable = True
+
+    self.assertTrue(env.reward_st_enable)
+    self.assertTrue(wrapped.reward_st_enable)
+
+  def test_st_enable_selects_forward_behavior(self):
+    env = _SoftnessEnv()
+    env.reward_softness = 0.1
+
+    value, gradient = jax.jit(jax.value_and_grad(env.comparison_reward))(
+        jp.array(0.0)
+    )
+    self.assertGreater(float(value), 0.0)
+    self.assertLess(float(value), 1.0)
+    self.assertNotEqual(float(gradient), 0.0)
+
+    env.reward_st_enable = True
+    value, gradient = jax.jit(jax.value_and_grad(env.comparison_reward))(
+        jp.array(0.0)
+    )
+    np.testing.assert_allclose(value, 0.0)
+    self.assertNotEqual(float(gradient), 0.0)
+
+  def test_zero_softness_is_hard_and_finite_in_both_modes(self):
+    for st_enable in (False, True):
+      with self.subTest(st_enable=st_enable):
+        env = _SoftnessEnv()
+        env.reward_st_enable = st_enable
+        value, gradient = jax.jit(jax.value_and_grad(env.comparison_reward))(
+            jp.array(0.0)
+        )
+        self.assertTrue(np.isfinite(value))
+        self.assertTrue(np.isfinite(gradient))
+        np.testing.assert_allclose(value, 0.0)
+        np.testing.assert_allclose(gradient, 0.0)
 
   def test_standalone_wrappers_use_the_default_softness(self):
     np.testing.assert_allclose(sj.relu(0.0), 0.0, rtol=1e-5)

@@ -206,7 +206,10 @@ class PandaPickCube(panda.PandaBase):
         for sensor_id in self._floor_hand_found_sensor
     ]
     floor_collision = sj.any(
-        sj.greater_st(jp.array(hand_floor_collision), 0.0, softness=self.reward_softness), axis=-1
+        sj.greater_st(
+            jp.array(hand_floor_collision), 0.0, softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        ), axis=-1
     )
     no_floor_collision = 1 - floor_collision
 

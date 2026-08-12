@@ -386,7 +386,13 @@ class Joystick(base.ApolloEnv):
         data.sensordata[adr[self._left_shin_right_shin_found_sensor]],
         data.sensordata[adr[self._left_thigh_right_thigh_found_sensor]],
     ])
-    return sj.any(sj.greater_st(c, 0.0, softness=self.reward_softness), axis=-1)
+    return sj.any(
+        sj.greater_st(
+            c, 0.0, softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        ),
+        axis=-1,
+    )
 
   def _cost_pose(self, qpos: jax.Array, commands: jax.Array) -> jax.Array:
     # Uniform weights when standing still.

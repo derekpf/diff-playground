@@ -119,7 +119,10 @@ class SwingUp(mjx_env.MjxEnv):
       metrics: dict[str, Any],
   ) -> jax.Array:
     del action, info, metrics  # Unused.
-    return reward.tolerance(self._pole_vertical(data), (_COSINE_BOUND, 1), softness=self.reward_softness)
+    return reward.tolerance(
+        self._pole_vertical(data), (_COSINE_BOUND, 1),
+        softness=self.reward_softness, st_enable=self.reward_st_enable,
+    )
 
   def _pole_vertical(self, data: mjx.Data) -> jax.Array:
     """Returns vertical (z) component of pole frame."""

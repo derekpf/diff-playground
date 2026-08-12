@@ -394,8 +394,14 @@ class Joystick(op3_base.Op3Env):
         for sensor_id in self._right_feet_floor_found_sensor
     ])
     feet_contact = jp.hstack([
-        sj.any(sj.greater_st(left_contact_values, 0.0, softness=self.reward_softness)),
-        sj.any(sj.greater_st(right_contact_values, 0.0, softness=self.reward_softness)),
+        sj.any(sj.greater_st(
+            left_contact_values, 0.0, softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        )),
+        sj.any(sj.greater_st(
+            right_contact_values, 0.0, softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        )),
     ])
     return jp.sum(vel_xy_norm_sq * feet_contact)
 

@@ -49,18 +49,32 @@ def _with_softness(fn, softness_position):
   return wrapped
 
 
+def _with_st_enable(st_fn, soft_fn, softness_position):
+  """Selects straight-through or ordinary behavior for an adapter."""
+
+  wrapped_st = _with_softness(st_fn, softness_position)
+  wrapped_soft = _with_softness(soft_fn, softness_position)
+
+  @functools.wraps(st_fn)
+  def wrapped(*args, st_enable: bool = True, **kwargs):
+    fn = wrapped_st if st_enable else wrapped_soft
+    return fn(*args, **kwargs)
+
+  return wrapped
+
+
 # Keep the external softjax argument order while providing the project default
 # when callers omit softness.
 abs = _with_softness(_softjax.abs, 1)
 clip = _with_softness(_softjax.clip, 3)
 greater = _with_softness(_softjax.greater, 2)
-greater_st = _with_softness(_softjax.greater_st, 2)
+greater_st = _with_st_enable(_softjax.greater_st, greater, 2)
 greater_equal = _with_softness(_softjax.greater_equal, 2)
-greater_equal_st = _with_softness(_softjax.greater_equal_st, 2)
+greater_equal_st = _with_st_enable(_softjax.greater_equal_st, greater_equal, 2)
 less = _with_softness(_softjax.less, 2)
-less_st = _with_softness(_softjax.less_st, 2)
+less_st = _with_st_enable(_softjax.less_st, less, 2)
 less_equal = _with_softness(_softjax.less_equal, 2)
-less_equal_st = _with_softness(_softjax.less_equal_st, 2)
+less_equal_st = _with_st_enable(_softjax.less_equal_st, less_equal, 2)
 max = _with_softness(_softjax.max, 3)
 min = _with_softness(_softjax.min, 3)
 relu = _with_softness(_softjax.relu, 1)

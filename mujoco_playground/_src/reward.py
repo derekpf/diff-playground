@@ -100,6 +100,7 @@ def tolerance(
     sigmoid: str = "gaussian",
     value_at_margin: float = _DEFAULT_VALUE_AT_MARGIN,
     softness: float = 0.0,
+    st_enable: bool = True,
 ) -> jp.ndarray:
   """Returns 1 when `x` falls inside the bounds, between 0 and 1 otherwise.
 
@@ -119,6 +120,7 @@ def tolerance(
       the distance from `x` to the nearest bound is equal to `margin`. Ignored
       if `margin == 0`.
     softness: Float controlling the softness of the soft comparisons.
+    st_enable: Whether the soft comparisons use straight-through behavior.
 
   Returns:
     A jax numpy array with values between 0.0 and 1.0.
@@ -134,8 +136,8 @@ def tolerance(
     raise ValueError("`margin` must be non-negative.")
 
   in_bounds = sj.logical_and(
-      sj.greater_equal_st(x, lower, softness=softness),
-      sj.less_equal_st(x, upper, softness=softness),
+      sj.greater_equal_st(x, lower, softness=softness, st_enable=st_enable),
+      sj.less_equal_st(x, upper, softness=softness, st_enable=st_enable),
   )
   if margin == 0:
     value = in_bounds
@@ -146,7 +148,7 @@ def tolerance(
     safe_upper = jp.where(jp.isinf(upper), x, upper)
     d = sj.div(
         sj.where(
-            sj.less_st(x, lower, softness=softness),
+            sj.less_st(x, lower, softness=softness, st_enable=st_enable),
             safe_lower - x,
             x - safe_upper,
         ),

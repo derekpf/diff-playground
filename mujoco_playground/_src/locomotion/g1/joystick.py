@@ -374,9 +374,15 @@ class Joystick(g1_base.G1Env):
         for sensorid in self._feet_floor_found_sensor
     ])
     contact = contact_values > 0
-    contact_reward = sj.greater_st(contact_values, 0.0, softness=self.reward_softness)
+    contact_reward = sj.greater_st(
+        contact_values, 0.0, softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
     first_contact_reward = sj.logical_and(
-        sj.greater_st(state.info["feet_air_time"], 0.0, softness=self.reward_softness),
+        sj.greater_st(
+            state.info["feet_air_time"], 0.0, softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        ),
         sj.logical_or(contact_reward, state.info["last_contact"]),
     )
     state.info["feet_air_time"] += self.dt
@@ -643,7 +649,13 @@ class Joystick(g1_base.G1Env):
             self._mj_model.sensor_adr[self._right_hand_right_thigh_found_sensor]
         ],
     ])
-    return sj.any(sj.greater_st(c, 0.0, softness=self.reward_softness), axis=-1)
+    return sj.any(
+        sj.greater_st(
+            c, 0.0, softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        ),
+        axis=-1,
+    )
 
   # Tracking rewards.
 

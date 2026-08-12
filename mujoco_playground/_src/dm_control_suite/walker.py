@@ -153,6 +153,7 @@ class PlanarWalker(mjx_env.MjxEnv):
         torso_height,
         bounds=(_STAND_HEIGHT, float("inf")),
         margin=_STAND_HEIGHT / 2, softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
     )
     metrics["reward/standing"] = standing
 
@@ -183,6 +184,7 @@ class PlanarWalker(mjx_env.MjxEnv):
         margin=self._move_speed / 2,
         value_at_margin=0.5,
         sigmoid="linear", softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
     )
     metrics["reward/move"] = move_reward
 

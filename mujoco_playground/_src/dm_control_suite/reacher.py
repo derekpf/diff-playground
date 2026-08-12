@@ -156,7 +156,10 @@ class Reacher(mjx_env.MjxEnv):
       metrics: dict[str, Any],
   ) -> jax.Array:
     del action, info, metrics  # Unused.
-    return reward.tolerance(self._finger_to_target_dist(data), (0, self._radii), softness=self.reward_softness)
+    return reward.tolerance(
+        self._finger_to_target_dist(data), (0, self._radii),
+        softness=self.reward_softness, st_enable=self.reward_st_enable,
+    )
 
   def _finger_to_target(self, data: mjx.Data) -> jax.Array:
     target_pos = data.geom_xpos[self._target_geom_id, :2]
