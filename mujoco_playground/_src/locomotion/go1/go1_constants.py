@@ -30,12 +30,55 @@ FULL_COLLISIONS_FLAT_TERRAIN_XML = (
     ROOT_PATH / "xmls" / "scene_mjx_fullcollisions_flat_terrain.xml"
 )
 
+FEET_ONLY_FLAT_TERRAIN_TORQUE_XML = (
+    ROOT_PATH / "xmls" / "scene_mjx_feetonly_flat_terrain_torque.xml"
+)
+FEET_ONLY_ROUGH_TERRAIN_TORQUE_XML = (
+    ROOT_PATH / "xmls" / "scene_mjx_feetonly_rough_terrain_torque.xml"
+)
+FULL_FLAT_TERRAIN_TORQUE_XML = (
+    ROOT_PATH / "xmls" / "scene_mjx_flat_terrain_torque.xml"
+)
+FULL_COLLISIONS_FLAT_TERRAIN_TORQUE_XML = (
+    ROOT_PATH / "xmls" / "scene_mjx_fullcollisions_flat_terrain_torque.xml"
+)
 
-def task_to_xml(task_name: str) -> epath.Path:
-  return {
+_TORQUE_XML_BY_POSITION_XML = {
+    str(FEET_ONLY_FLAT_TERRAIN_XML): FEET_ONLY_FLAT_TERRAIN_TORQUE_XML,
+    str(FEET_ONLY_ROUGH_TERRAIN_XML): FEET_ONLY_ROUGH_TERRAIN_TORQUE_XML,
+    str(FULL_FLAT_TERRAIN_XML): FULL_FLAT_TERRAIN_TORQUE_XML,
+    str(FULL_COLLISIONS_FLAT_TERRAIN_XML): (
+        FULL_COLLISIONS_FLAT_TERRAIN_TORQUE_XML
+    ),
+}
+
+
+def xml_for_control_mode(
+    xml_path: str | epath.Path, control_mode: str
+) -> epath.Path:
+  """Returns the scene XML for a Go1 control mode."""
+  if control_mode == "position":
+    return epath.Path(xml_path)
+  if control_mode != "torque":
+    raise ValueError(
+        f"Unsupported Go1 control mode: {control_mode!r}. "
+        "Expected 'position' or 'torque'."
+    )
+
+  try:
+    return _TORQUE_XML_BY_POSITION_XML[str(xml_path)]
+  except KeyError as e:
+    raise ValueError(
+        f"Torque control is not supported for Go1 XML {xml_path!r}."
+    ) from e
+
+
+def task_to_xml(task_name: str, control_mode: str = "position") -> epath.Path:
+  position_xml = {
       "flat_terrain": FEET_ONLY_FLAT_TERRAIN_XML,
       "rough_terrain": FEET_ONLY_ROUGH_TERRAIN_XML,
   }[task_name]
+  return xml_for_control_mode(position_xml, control_mode)
 
 
 FEET_SITES = [

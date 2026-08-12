@@ -58,6 +58,10 @@ class Wrapper(mjx_env.MjxEnv):
   def reward_softness(self, value: float) -> None:
     self.env.reward_softness = value
 
+  @property
+  def episode_length(self) -> int:
+    return self.env.episode_length
+
   def __getattr__(self, name):
     if name == '__setstate__':
       raise AttributeError(name)
@@ -93,7 +97,7 @@ class Wrapper(mjx_env.MjxEnv):
 
 def wrap_for_brax_training(
     env: mjx_env.MjxEnv,
-    episode_length: int = 1000,
+    episode_length: Optional[int] = None,
     action_repeat: int = 1,
     randomization_fn: Optional[
         Callable[[mjx.Model], Tuple[mjx.Model, mjx.Model]]
@@ -117,6 +121,9 @@ def wrap_for_brax_training(
     environment did not already have batch dimensions, it is additional Vmap
     wrapped.
   """
+  if episode_length is None:
+    episode_length = env.episode_length
+
   if randomization_fn is None:
     env = brax_training.VmapWrapper(env)  # pytype: disable=wrong-arg-types
   else:
@@ -252,4 +259,3 @@ class BraxDomainRandomizationVmapWrapper(Wrapper):
         self._mjx_model_v, state, action
     )
     return res
-

@@ -1,15 +1,20 @@
-<mujoco model="go1">
+  <mujoco model="go1">
   <compiler angle="radian" meshdir="../../../../../mujoco_menagerie/unitree_go1/assets" autolimits="true"/>
 
   <option iterations="1" ls_iterations="5" timestep="0.004" integrator="Euler">
     <flag eulerdamp="disable"/>
   </option>
 
+  <custom>
+    <numeric data="30" name="max_contact_points"/>
+    <numeric data="12" name="max_geom_pairs"/>
+  </custom>
+
   <default>
     <default class="go1">
-      <geom condim="1" contype="0" conaffinity="1"/>
+      <geom condim="1"/>
       <joint axis="0 1 0" armature="0.005" damping="0.5"/>
-      <position forcerange="-23.7 23.7" inheritrange="1" kp="35"/>
+      <motor ctrlrange="-23.7 23.7" forcerange="-23.7 23.7"/>
       <default class="abduction">
         <joint axis="1 0 0" range="-0.863 0.863" frictionloss="0.3"/>
       </default>
@@ -18,7 +23,7 @@
       </default>
       <default class="knee">
         <joint range="-2.818 -0.888" frictionloss="1.0"/>
-        <position forcerange="-35.55 35.55"/>
+        <motor ctrlrange="-35.55 35.55" forcerange="-35.55 35.55"/>
       </default>
       <default class="visual">
         <geom type="mesh" contype="0" conaffinity="0" group="2" material="dark"/>
@@ -196,7 +201,7 @@
     </body>
   </worldbody>
 
-  <include file="go1_actuators_position.xml"/>
+  <include file="go1_actuators_torque.xml"/>
 
   <sensor>
     <gyro site="imu" name="gyro"/>

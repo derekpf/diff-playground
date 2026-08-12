@@ -31,6 +31,7 @@ def default_config() -> config_dict.ConfigDict:
   return config_dict.create(
       ctrl_dt=0.02,
       sim_dt=0.004,
+      control_mode="position",
       Kp=35.0,
       Kd=0.5,
       episode_length=300,
@@ -119,7 +120,11 @@ class Getup(go1_base.Go1Env):
     self._soft_lowers = c - 0.5 * r * self._config.soft_joint_pos_limit_factor
     self._soft_uppers = c + 0.5 * r * self._config.soft_joint_pos_limit_factor
 
-    self._settle_steps = int(self._config.settle_time / self.sim_dt)
+    self._settle_steps = (
+        int(self._config.settle_time / self.sim_dt)
+        if self.control_mode == "position"
+        else 0
+    )
     self._z_des = 0.275
     self._up_vec = jp.array([0.0, 0.0, -1.0])
     self._imu_site_id = self._mj_model.site("imu").id
@@ -171,16 +176,18 @@ class Getup(go1_base.Go1Env):
         self.mj_model,
         qpos=qpos,
         qvel=qvel,
-        ctrl=qpos[7:],
+        ctrl=self._get_reset_control(qpos[7:]),
         impl=self.mjx_model.impl.value,
         naconmax=self._config.naconmax,
         njmax=self._config.njmax,
     )
     data = mjx.forward(self.mjx_model, data)
 
-    # Let the robot settle for a few steps.
-    data = mjx_env.step(self.mjx_model, data, qpos[7:], self._settle_steps)
-    data = data.replace(time=0.0)
+    # Let the position-controlled robot settle for a few steps. Torque mode
+    # starts from zero control and does not run this position-target phase.
+    if self.control_mode == "position":
+      data = mjx_env.step(self.mjx_model, data, qpos[7:], self._settle_steps)
+      data = data.replace(time=0.0)
 
     info = {
         "rng": rng,
@@ -198,8 +205,9 @@ class Getup(go1_base.Go1Env):
 
   def step(self, state: mjx_env.State, action: jax.Array) -> mjx_env.State:
     motor_targets = state.data.qpos[7:] + action * self._config.action_scale
+    control = self._get_control(motor_targets, action)
     data = mjx_env.step(
-        self.mjx_model, state.data, motor_targets, self.n_substeps
+        self.mjx_model, state.data, control, self.n_substeps
     )
 
     obs = self._get_obs(data, state.info)

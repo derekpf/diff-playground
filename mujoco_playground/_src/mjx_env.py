@@ -270,6 +270,11 @@ class MjxEnv(abc.ABC):
     return self._sim_dt
 
   @property
+  def episode_length(self) -> int:
+    """Default episode length in control steps."""
+    return self._config.episode_length
+
+  @property
   def n_substeps(self) -> int:
     """Number of sim steps per control step."""
     return int(round(self.dt / self.sim_dt))

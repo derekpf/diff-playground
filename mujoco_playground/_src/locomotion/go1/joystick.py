@@ -33,6 +33,7 @@ def default_config() -> config_dict.ConfigDict:
   return config_dict.create(
       ctrl_dt=0.02,
       sim_dt=0.004,
+      control_mode="position",
       episode_length=1000,
       Kp=35.0,
       Kd=0.5,
@@ -172,7 +173,7 @@ class Joystick(go1_base.Go1Env):
         self.mj_model,
         qpos=qpos,
         qvel=qvel,
-        ctrl=qpos[7:],
+        ctrl=self._get_reset_control(qpos[7:]),
         impl=self.mjx_model.impl.value,
         naconmax=self._config.naconmax,
         njmax=self._config.njmax,
@@ -252,8 +253,9 @@ class Joystick(go1_base.Go1Env):
     # state = self._reset_if_outside_bounds(state)
 
     motor_targets = self._default_pose + action * self._config.action_scale
+    control = self._get_control(motor_targets, action)
     data = mjx_env.step(
-        self.mjx_model, state.data, motor_targets, self.n_substeps
+        self.mjx_model, state.data, control, self.n_substeps
     )
 
     contact_values = jp.array([
@@ -452,6 +454,10 @@ class Joystick(go1_base.Go1Env):
   ) -> jax.Array:
     # Tracking of linear velocity commands (xy axes).
     lin_vel_error = jp.sum(jp.square(commands[:2] - local_vel[:2]))
+    # delta = 0.5
+    # error = lin_vel_error / self._config.reward_config.tracking_sigma
+    # loss = 2.0 * delta**2 * (jp.sqrt(1.0 + error / delta**2) - 1.0)
+    # return 1.0 - loss
     return jp.exp(-lin_vel_error / self._config.reward_config.tracking_sigma)
 
   def _reward_tracking_ang_vel(
@@ -461,6 +467,10 @@ class Joystick(go1_base.Go1Env):
   ) -> jax.Array:
     # Tracking of angular velocity commands (yaw).
     ang_vel_error = jp.square(commands[2] - ang_vel[2])
+    # delta = 0.5
+    # error = ang_vel_error / self._config.reward_config.tracking_sigma
+    # loss = 2.0 * delta**2 * (jp.sqrt(1.0 + error / delta**2) - 1.0)
+    # return 1.0 - loss
     return jp.exp(-ang_vel_error / self._config.reward_config.tracking_sigma)
 
   # Base-related rewards.
@@ -500,6 +510,10 @@ class Joystick(go1_base.Go1Env):
   def _reward_pose(self, qpos: jax.Array) -> jax.Array:
     # Stay close to the default pose.
     weight = jp.array([1.0, 1.0, 0.1] * 4)
+    # delta = 0.5
+    # error = jp.sum(jp.square(qpos - self._default_pose) * weight)
+    # loss = 2.0 * delta**2 * (jp.sqrt(1.0 + error / delta**2) - 1.0)
+    # return 1.0 - loss
     return jp.exp(-jp.sum(jp.square(qpos - self._default_pose) * weight))
 
   def _cost_stand_still(
