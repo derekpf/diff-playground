@@ -2,7 +2,9 @@
   <sensor>
     <contact name="left_foot_floor_found" geom1="left_foot" geom2="floor" reduce="mindist" num="1" data="found"/>
     <contact name="right_foot_floor_found" geom1="right_foot" geom2="floor" reduce="mindist" num="1" data="found"/>
-    <contact name="right_foot_left_foot_found" geom1="right_foot" geom2="left_foot" reduce="mindist" num="1" data="found"/>
+    <contact name="left_foot_proxy_1_found" geom1="left_foot_proxy_1" reduce="mindist" num="1" data="found"/>
+    <contact name="left_foot_proxy_2_found" geom1="left_foot_proxy_2" reduce="mindist" num="1" data="found"/>
+    <contact name="left_foot_proxy_3_found" geom1="left_foot_proxy_3" reduce="mindist" num="1" data="found"/>
     <contact name="left_foot_right_shin_found" geom1="left_foot" geom2="right_shin" reduce="mindist" num="1" data="found"/>
     <contact name="right_foot_left_shin_found" geom1="right_foot" geom2="left_shin" reduce="mindist" num="1" data="found"/>
     <contact name="left_hand_left_thigh_found" geom1="left_hand_collision" geom2="left_thigh" reduce="mindist" num="1" data="found"/>

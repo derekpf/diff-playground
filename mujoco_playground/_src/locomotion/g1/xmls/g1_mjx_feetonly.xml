@@ -202,6 +202,12 @@
                   <joint name="left_ankle_roll_joint" class="ankle_roll"/>
                   <geom class="visual" material="black" mesh="left_ankle_roll_link"/>
                   <geom name="left_foot" class="foot" pos="0.04 0 -0.029" size="0.09 0.03 0.008" type="box"/>
+                  <geom name="left_foot_proxy_1" class="collision" type="capsule" size="0.011"
+                    fromto="-0.039 -0.019 -0.029 0.119 -0.019 -0.029" mass="0" contype="2" conaffinity="2"/>
+                  <geom name="left_foot_proxy_2" class="collision" type="capsule" size="0.011"
+                    fromto="-0.039 0 -0.029 0.119 0 -0.029" mass="0" contype="2" conaffinity="2"/>
+                  <geom name="left_foot_proxy_3" class="collision" type="capsule" size="0.011"
+                    fromto="-0.039 0.019 -0.029 0.119 0.019 -0.029" mass="0" contype="2" conaffinity="2"/>
                 </body>
               </body>
             </body>
@@ -261,6 +267,12 @@
                   <joint name="right_ankle_roll_joint" class="ankle_roll"/>
                   <geom class="visual" material="black" mesh="right_ankle_roll_link"/>
                   <geom name="right_foot" class="foot" pos="0.04 0 -0.029" size="0.09 0.03 0.008" type="box"/>
+                  <geom name="right_foot_proxy_1" class="collision" type="capsule" size="0.011"
+                    fromto="-0.039 -0.019 -0.029 0.119 -0.019 -0.029" mass="0" contype="2" conaffinity="2"/>
+                  <geom name="right_foot_proxy_2" class="collision" type="capsule" size="0.011"
+                    fromto="-0.039 0 -0.029 0.119 0 -0.029" mass="0" contype="2" conaffinity="2"/>
+                  <geom name="right_foot_proxy_3" class="collision" type="capsule" size="0.011"
+                    fromto="-0.039 0.019 -0.029 0.119 0.019 -0.029" mass="0" contype="2" conaffinity="2"/>
                 </body>
               </body>
             </body>
@@ -412,7 +424,6 @@
     <pair name="right_foot_floor" geom1="right_foot" geom2="floor" condim="3" friction="0.6 0.6"/>
     <pair name="left_hand_thigh" geom1="left_hand_collision" geom2="left_thigh" condim="1"/>
     <pair name="right_hand_thigh" geom1="right_hand_collision" geom2="right_thigh" condim="1"/>
-    <pair name="left_foot_right_foot" geom1="left_foot" geom2="right_foot" condim="1"/>
     <!-- <pair name="left_foot_right_shin" geom1="left_foot" geom2="right_shin" condim="1"/> -->
     <!-- <pair name="right_foot_left_shin" geom1="right_foot" geom2="left_shin" condim="1"/> -->
     <!-- <pair name="left_shin_right_shin" geom1="left_shin" geom2="right_shin" condim="1"/> -->
