@@ -136,6 +136,7 @@ class Run(mjx_env.MjxEnv):
         margin=_RUN_SPEED,
         value_at_margin=0,
         sigmoid="linear", softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
     )
 
   @property

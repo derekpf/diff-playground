@@ -224,6 +224,7 @@ class MjxEnv(abc.ABC):
       config_overrides: Optional[Dict[str, Union[str, int, list[Any]]]] = None,
   ):
     self.reward_softness: float = 0.0
+    self.reward_st_enable: bool = False
     self._config = config.lock()
     if config_overrides:
       self._config.update_from_flattened_dict(config_overrides)

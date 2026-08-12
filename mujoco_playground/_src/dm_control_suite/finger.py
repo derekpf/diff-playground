@@ -301,7 +301,10 @@ class Turn(mjx_env.MjxEnv):
       metrics: dict[str, Any],
   ) -> jax.Array:
     del metrics, action, info  # Unused.
-    return sj.less_equal_st(self._dist_to_target(data), 0.0, softness=self.reward_softness)
+    return sj.less_equal_st(
+        self._dist_to_target(data), 0.0, softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
 
   def _hinge_velocity(self, data: mjx.Data) -> jax.Array:
     return mjx_env.get_sensor_data(self.mj_model, data, "hinge_velocity")[0]

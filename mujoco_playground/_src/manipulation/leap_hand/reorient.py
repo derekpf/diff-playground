@@ -391,7 +391,8 @@ class CubeReorient(leap_hand_base.LeapHandEnv):
     palm_pos = self.get_palm_position(data)
     cube_pose_mse = sj.norm(palm_pos - cube_pos)
     cube_pos_reward = reward.tolerance(
-        cube_pose_mse, (0, 0.02), margin=0.05, sigmoid="linear", softness=self.reward_softness
+        cube_pose_mse, (0, 0.02), margin=0.05, sigmoid="linear",
+        softness=self.reward_softness, st_enable=self.reward_st_enable,
     )
 
     hand_pose_reward = jp.sum(
@@ -426,7 +427,10 @@ class CubeReorient(leap_hand_base.LeapHandEnv):
 
   def _reward_cube_orientation(self, data: mjx.Data) -> jax.Array:
     ori_error = self._cube_orientation_error(data)
-    return reward.tolerance(ori_error, (0, 0.2), margin=jp.pi, sigmoid="linear", softness=self.reward_softness)
+    return reward.tolerance(
+        ori_error, (0, 0.2), margin=jp.pi, sigmoid="linear",
+        softness=self.reward_softness, st_enable=self.reward_st_enable,
+    )
 
   def _cost_action_rate(
       self, act: jax.Array, last_act: jax.Array, last_last_act: jax.Array

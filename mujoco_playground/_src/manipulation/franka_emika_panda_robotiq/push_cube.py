@@ -403,6 +403,7 @@ class PandaRobotiqPushCube(panda_robotiq.PandaRobotiqBase):
         (0, 0.1),
         margin=1.0,
         sigmoid="linear", softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
     )
 
     box_target = reward_util.tolerance(
@@ -410,12 +411,14 @@ class PandaRobotiqPushCube(panda_robotiq.PandaRobotiqBase):
         (0, 0.005),
         margin=0.4,
         sigmoid="reciprocal", softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
     )
 
     target_quat = data.mocap_quat[self._mocap_target, :].squeeze()
     ori_error = self._orientation_error(data.xquat[self._obj_body], target_quat)
     box_orientation = reward_util.tolerance(
-        ori_error, (0, 0.2), margin=jp.pi, sigmoid="reciprocal", softness=self.reward_softness
+        ori_error, (0, 0.2), margin=jp.pi, sigmoid="reciprocal",
+        softness=self.reward_softness, st_enable=self.reward_st_enable,
     )
 
     hand_box_normal = []
@@ -438,12 +441,14 @@ class PandaRobotiqPushCube(panda_robotiq.PandaRobotiqBase):
         (0, 0.5),
         margin=4.5,
         sigmoid="linear", softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
     )
     joint_vel_mse = sj.norm(
         data.qvel[self._qd_low_joint_pos_index : self._qd_upper_joint_pos_index]
     )
     joint_vel = reward_util.tolerance(
-        joint_vel_mse, (0, 0.5), margin=2.0, sigmoid="reciprocal", softness=self.reward_softness
+        joint_vel_mse, (0, 0.5), margin=2.0, sigmoid="reciprocal",
+        softness=self.reward_softness, st_enable=self.reward_st_enable,
     )
     total_command = sj.norm(action)
     action_rate = sj.norm(action - info["last_action"])
@@ -497,7 +502,8 @@ class PandaRobotiqPushCube(panda_robotiq.PandaRobotiqBase):
         sub_success,
         sj.greater_equal_st(
             state.info["success_step_count"],
-            self._config.reward_config.success_step_count, softness=self.reward_softness,
+            self._config.reward_config.success_step_count,
+            softness=self.reward_softness, st_enable=self.reward_st_enable,
         ),
     )
     return success, sub_success

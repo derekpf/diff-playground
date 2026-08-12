@@ -78,6 +78,27 @@ class RewardTest(parameterized.TestCase):
     )
     self.assertTrue(np.all(np.isfinite(values)))
 
+  def test_tolerance_st_enable_selects_forward_behavior(self):
+    def objective(x, st_enable):
+      return reward.tolerance(
+          x,
+          bounds=(0.0, 0.0),
+          softness=0.1,
+          st_enable=st_enable,
+      )
+
+    soft_value, soft_gradient = jax.jit(
+        jax.value_and_grad(lambda x: objective(x, False))
+    )(jp.array(0.05))
+    hard_value, hard_gradient = jax.jit(
+        jax.value_and_grad(lambda x: objective(x, True))
+    )(jp.array(0.05))
+
+    self.assertGreater(float(soft_value), 0.0)
+    np.testing.assert_allclose(hard_value, 0.0)
+    self.assertNotEqual(float(soft_gradient), 0.0)
+    self.assertNotEqual(float(hard_gradient), 0.0)
+
   @parameterized.parameters(*_SIGMOIDS)
   def test_sigmoids_are_finite_and_differentiable(self, sigmoid):
     def objective(x):

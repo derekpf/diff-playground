@@ -250,16 +250,26 @@ class Balance(mjx_env.MjxEnv):
     upright = (pole_angle_cos + 1) / 2
 
     cart_position = data.qpos[self._slider_qposadr]
-    centered = reward.tolerance(cart_position, margin=2, softness=self.reward_softness)
+    centered = reward.tolerance(
+        cart_position, margin=2, softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
     centered = (1 + centered) / 2
 
     small_control = reward.tolerance(
-        action[0], margin=1, value_at_margin=0, sigmoid="quadratic", softness=self.reward_softness
+        action[0], margin=1, value_at_margin=0, sigmoid="quadratic",
+        softness=self.reward_softness, st_enable=self.reward_st_enable,
     )
     small_control = (4 + small_control) / 5
 
     angular_vel = data.qvel[1:]
-    small_velocity = sj.min(reward.tolerance(angular_vel, margin=5, softness=self.reward_softness), softness=self.reward_softness)
+    small_velocity = sj.min(
+        reward.tolerance(
+            angular_vel, margin=5, softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        ),
+        softness=self.reward_softness,
+    )
     small_velocity = (1 + small_velocity) / 2
 
     components = {
@@ -320,12 +330,16 @@ class Balance(mjx_env.MjxEnv):
     del action, info  # Unused.
 
     cart_position = data.qpos[self._slider_qposadr]
-    cart_in_bounds = reward.tolerance(cart_position, self._CART_RANGE, softness=self.reward_softness)
+    cart_in_bounds = reward.tolerance(
+        cart_position, self._CART_RANGE, softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
     metrics["reward/cart_in_bounds"] = cart_in_bounds
 
     pole_angle_cos = data.xmat[2, 2, 2]
     angle_in_bounds = reward.tolerance(
-        pole_angle_cos, self._ANGLE_COSINE_RANGE, softness=self.reward_softness
+        pole_angle_cos, self._ANGLE_COSINE_RANGE, softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
     )
     metrics["reward/angle_in_bounds"] = angle_in_bounds
 

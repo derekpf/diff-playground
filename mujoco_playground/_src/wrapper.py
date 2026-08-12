@@ -59,6 +59,14 @@ class Wrapper(mjx_env.MjxEnv):
     self.env.reward_softness = value
 
   @property
+  def reward_st_enable(self) -> bool:
+    return self.env.reward_st_enable
+
+  @reward_st_enable.setter
+  def reward_st_enable(self, value: bool) -> None:
+    self.env.reward_st_enable = value
+
+  @property
   def episode_length(self) -> int:
     return self.env.episode_length
 

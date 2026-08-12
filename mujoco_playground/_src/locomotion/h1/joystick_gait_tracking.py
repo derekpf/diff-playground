@@ -237,11 +237,20 @@ class JoystickGaitTracking(h1_base.H1Env):
     right_feet_contact = right_contact_values > 0
     contact = jp.hstack([jp.any(left_feet_contact), jp.any(right_feet_contact)])
     contact_reward = jp.hstack([
-        sj.any(sj.greater_st(left_contact_values, 0.0, softness=self.reward_softness)),
-        sj.any(sj.greater_st(right_contact_values, 0.0, softness=self.reward_softness)),
+        sj.any(sj.greater_st(
+            left_contact_values, 0.0, softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        )),
+        sj.any(sj.greater_st(
+            right_contact_values, 0.0, softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        )),
     ])
     first_contact_reward = sj.logical_and(
-        sj.greater_st(state.info["feet_air_time"], 0.0, softness=self.reward_softness),
+        sj.greater_st(
+            state.info["feet_air_time"], 0.0, softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        ),
         sj.logical_or(contact_reward, state.info["last_contact"]),
     )
     state.info["feet_air_time"] += self.dt
@@ -455,7 +464,10 @@ class JoystickGaitTracking(h1_base.H1Env):
   def _cost_lin_vel_z(self, global_linvel, gait: jax.Array) -> jax.Array:  # pylint: disable=redefined-outer-name
     # Penalize z axis base linear velocity unless pronk or bound.
     cost = jp.square(global_linvel[2])
-    return cost * sj.greater_st(gait, 0, softness=self.reward_softness)
+    return cost * sj.greater_st(
+        gait, 0, softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
 
   def _cost_ang_vel_xy(self, global_angvel) -> jax.Array:
     # Penalize xy axes base angular velocity.
