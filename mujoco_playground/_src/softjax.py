@@ -76,8 +76,13 @@ less_st = _with_st_enable(_softjax.less_st, less, 2)
 less_equal = _with_softness(_softjax.less_equal, 2)
 less_equal_st = _with_st_enable(_softjax.less_equal_st, less_equal, 2)
 max = _with_softness(_softjax.max, 3)
+max_st = _with_st_enable(_softjax.st(_softjax.max), max, 3)
 min = _with_softness(_softjax.min, 3)
+min_st = _with_st_enable(_softjax.st(_softjax.min), min, 3)
 relu = _with_softness(_softjax.relu, 1)
+relu_st = _with_st_enable(_softjax.st(_softjax.relu), relu, 1)
+abs_st = _with_st_enable(_softjax.st(_softjax.abs), abs, 1)
+clip_st = _with_st_enable(_softjax.st(_softjax.clip), clip, 3)
 
 # Operations without a softness argument are passed through unchanged.
 all = _softjax.all

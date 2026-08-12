@@ -70,6 +70,32 @@ class TestSuite(parameterized.TestCase):
         state.metrics["reward/feet_slip"], expected, rtol=1e-5, atol=1e-6
     )
 
+  def test_go1_reward_st_enable_makes_forward_reward_hard(self) -> None:
+    def rollout(softness: float, st_enable: bool):
+      env = locomotion.load(
+          "Go1JoystickFlatTerrain", config_overrides={"impl": "jax"}
+      )
+      env.reward_softness = softness
+      env.reward_st_enable = st_enable
+      state = jax.jit(env.reset)(jax.random.PRNGKey(0))
+      state.info["command"] = jp.array([1.0, 0.0, 0.5])
+      state.info["steps_until_next_cmd"] = jp.array(100000, dtype=jp.int32)
+      action = jp.zeros(env.action_size)
+      step = jax.jit(env.step)
+      state = step(state, action)
+      return step(state, action)
+
+    hard_state = rollout(0.0, False)
+    st_state = rollout(0.06, True)
+
+    np.testing.assert_allclose(
+        st_state.reward, hard_state.reward, rtol=1e-5, atol=1e-6
+    )
+    for name, value in hard_state.metrics.items():
+      np.testing.assert_allclose(
+          st_state.metrics[name], value, rtol=1e-5, atol=1e-6
+      )
+
   @parameterized.parameters(
       "BarkourJoystick",
       "BerkeleyHumanoidJoystickFlatTerrain",
