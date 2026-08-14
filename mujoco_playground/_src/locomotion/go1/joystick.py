@@ -32,7 +32,7 @@ from mujoco_playground._src.locomotion.go1 import go1_constants as consts
 def default_config() -> config_dict.ConfigDict:
   return config_dict.create(
       ctrl_dt=0.02,
-      sim_dt=0.004,
+      sim_dt=0.005,
       control_mode="position",
       episode_length=1000,
       Kp=35.0,
@@ -71,10 +71,10 @@ def default_config() -> config_dict.ConfigDict:
               action_rate=-0.01,
               energy=-0.001,
               # Feet.
-              feet_clearance=-2.0,
-              feet_height=-0.2,
-              feet_slip=-0.1,
-              feet_air_time=0.1,
+              feet_clearance=0.0,
+              feet_height=0.0,
+              feet_slip=0.0,
+              feet_air_time=0.0,
           ),
           tracking_sigma=0.25,
           max_foot_height=0.1,
@@ -297,13 +297,7 @@ class Joystick(go1_base.Go1Env):
     rewards = {
         k: v * self._config.reward_config.scales[k] for k, v in rewards.items()
     }
-    reward = sj.clip_st(
-        sum(rewards.values()) * self.dt,
-        0.0,
-        10000.0,
-        softness=self.reward_softness,
-        st_enable=self.reward_st_enable,
-    )
+    reward = sum(rewards.values()) * self.dt
 
     state.info["last_last_act"] = state.info["last_act"]
     state.info["last_act"] = action
