@@ -224,6 +224,30 @@ class SoftjaxTest(absltest.TestCase):
         )[1]
         np.testing.assert_allclose(positional_gradient, gradients[0])
 
+  def test_st_reward_primitives_have_hard_forward_values(self):
+    np.testing.assert_allclose(
+        sj.abs_st(-0.05, softness=0.1), 0.05, rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        sj.clip_st(0.0, 0.0, 10000.0, softness=0.1), 0.0, rtol=1e-5
+    )
+    values = jp.array([-1.0, 1.0])
+    np.testing.assert_allclose(sj.max_st(values, softness=0.1), 1.0)
+    np.testing.assert_allclose(sj.min_st(values, softness=0.1), -1.0)
+    np.testing.assert_allclose(sj.relu_st(0.0, softness=0.1), 0.0)
+
+    np.testing.assert_allclose(
+        sj.clip_st(0.0, 0.0, 10000.0, softness=0.1, st_enable=False),
+        0.1 * np.log(2.0),
+        rtol=1e-5,
+    )
+    _, gradient = jax.jvp(
+        lambda x: sj.clip_st(x, 0.0, 10000.0, softness=0.1),
+        (jp.array(0.0),),
+        (jp.array(1.0),),
+    )
+    self.assertNotEqual(float(gradient), 0.0)
+
   def test_reductions(self):
     values = jp.array([0.0, 0.01])
     np.testing.assert_allclose(sj.max(values), 0.01, rtol=1e-5)

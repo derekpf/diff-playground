@@ -50,7 +50,7 @@ def default_config() -> config_dict.ConfigDict:
       action_repeat=1,
       vision=False,
       vision_config=default_vision_config(),
-      impl="warp",
+      impl="jax",
       naconmax=0,
       njmax=2,
   )
