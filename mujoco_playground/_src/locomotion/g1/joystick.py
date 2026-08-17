@@ -66,10 +66,10 @@ def default_config() -> config_dict.ConfigDict:
               dof_acc=0.0,
               # Feet related rewards.
               feet_clearance=0.0,
-              feet_air_time=2.0,
-              feet_slip=-0.25,
+              feet_air_time=0.0,
+              feet_slip=0.0,
               feet_height=0.0,
-              feet_phase=1.0,
+              feet_phase=0.0,
               # Other rewards.
               alive=0.0,
               stand_still=-1.0,
@@ -404,7 +404,7 @@ class Joystick(g1_base.G1Env):
     rewards = {
         k: v * self._config.reward_config.scales[k] for k, v in rewards.items()
     }
-    reward = sj.clip(sum(rewards.values()) * self.dt, 0.0, 10000.0, softness=self.reward_softness)
+    reward = sum(rewards.values()) * self.dt
 
     state.info["push"] = push
     state.info["step"] += 1
