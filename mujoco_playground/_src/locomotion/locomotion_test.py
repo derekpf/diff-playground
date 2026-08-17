@@ -16,10 +16,8 @@
 
 import jax
 import jax.numpy as jp
-import mujoco
 import numpy as np
 from absl.testing import absltest, parameterized
-from mujoco.mjx._src import collision_driver
 
 from mujoco_playground._src import locomotion
 
@@ -133,92 +131,6 @@ class TestSuite(parameterized.TestCase):
     np.testing.assert_allclose(
         env._cost_lin_vel_z(global_linvel, boundary + 1.0), 1.0
     )
-
-
-class G1FootProxyTest(absltest.TestCase):
-  """Tests for G1's termination-only foot collision proxies."""
-
-  @classmethod
-  def setUpClass(cls) -> None:
-    super().setUpClass()
-    cls.env = locomotion.load(
-        "G1JoystickFlatTerrain", config_overrides={"impl": "jax"}
-    )
-    cls.state = jax.jit(cls.env.reset)(jax.random.PRNGKey(0))
-
-  def test_collision_candidates_use_foot_proxies(self) -> None:
-    model = self.env.mj_model
-    pairs = list(collision_driver.geom_pairs(model))
-
-    def pair_names(pair):
-      return model.geom(pair[0]).name, model.geom(pair[1]).name
-
-    def pair_types(pair):
-      return model.geom_type[pair[0]], model.geom_type[pair[1]]
-
-    box_box_pairs = [
-        pair
-        for pair in pairs
-        if pair_types(pair)
-        == (mujoco.mjtGeom.mjGEOM_BOX, mujoco.mjtGeom.mjGEOM_BOX)
-    ]
-    self.assertEmpty(box_box_pairs)
-
-    proxy_pairs = {
-        pair_names(pair)
-        for pair in pairs
-        if all("foot_proxy" in name for name in pair_names(pair))
-    }
-    expected_proxy_pairs = {
-        (f"left_foot_proxy_{left}", f"right_foot_proxy_{right}")
-        for left in range(1, 4)
-        for right in range(1, 4)
-    }
-    self.assertEqual(proxy_pairs, expected_proxy_pairs)
-    for pair in pairs:
-      if pair_names(pair) in proxy_pairs:
-        self.assertEqual(
-            pair_types(pair),
-            (
-                mujoco.mjtGeom.mjGEOM_CAPSULE,
-                mujoco.mjtGeom.mjGEOM_CAPSULE,
-            ),
-        )
-        self.assertEqual(pair[2], -1)
-
-    floor_box_pairs = {
-        pair_names(pair)
-        for pair in pairs
-        if pair_types(pair)
-        == (mujoco.mjtGeom.mjGEOM_PLANE, mujoco.mjtGeom.mjGEOM_BOX)
-    }
-    self.assertEqual(
-        floor_box_pairs,
-        {("floor", "left_foot"), ("floor", "right_foot")},
-    )
-    self.assertFalse(
-        any(
-            "floor" in pair_names(pair)
-            and any("foot_proxy" in name for name in pair_names(pair))
-            for pair in pairs
-        )
-    )
-
-  def test_initial_proxy_sensors_and_termination_aggregation(self) -> None:
-    sensor_adr = self.env._foot_proxy_sensor_adr
-    np.testing.assert_array_equal(
-        self.state.data.sensordata[sensor_adr], np.zeros(3)
-    )
-
-    sensordata = self.state.data.sensordata.at[sensor_adr].set(0)
-    upright_data = self.state.data.replace(sensordata=sensordata)
-    self.assertFalse(bool(self.env._get_termination(upright_data)))
-
-    for address in np.asarray(sensor_adr):
-      contact_data = upright_data.replace(
-          sensordata=upright_data.sensordata.at[address].set(1)
-      )
-      self.assertTrue(bool(self.env._get_termination(contact_data)))
 
 
 if __name__ == "__main__":

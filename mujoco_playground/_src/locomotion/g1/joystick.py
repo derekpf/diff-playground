@@ -236,12 +236,9 @@ class Joystick(g1_base.G1Env):
         self._mj_model.sensor(foot_geom + "_floor_found").id
         for foot_geom in ["left_foot", "right_foot"]
     ]
-    self._foot_proxy_sensor_adr = jp.array([
-        self._mj_model.sensor_adr[
-            self._mj_model.sensor(f"left_foot_proxy_{i}_found").id
-        ]
-        for i in range(1, 4)
-    ])
+    self._right_foot_left_foot_found_sensor = self._mj_model.sensor(
+        "right_foot_left_foot_found"
+    ).id
     self._left_foot_right_shin_found_sensor = self._mj_model.sensor(
         "left_foot_right_shin_found"
     ).id
@@ -446,21 +443,15 @@ class Joystick(g1_base.G1Env):
 
   def _get_termination(self, data: mjx.Data) -> jax.Array:
     fall_termination = self.get_gravity(data, "torso")[-1] < 0.0
-    contact_termination = jp.any(
-        data.sensordata[self._foot_proxy_sensor_adr] > 0
-    )
-    contact_termination |= (
-        data.sensordata[
-            self._mj_model.sensor_adr[self._left_foot_right_shin_found_sensor]
-        ]
-        > 0
-    )
-    contact_termination |= (
-        data.sensordata[
-            self._mj_model.sensor_adr[self._right_foot_left_shin_found_sensor]
-        ]
-        > 0
-    )
+    contact_termination = data.sensordata[
+        self._mj_model.sensor_adr[self._right_foot_left_foot_found_sensor]
+    ] > 0
+    contact_termination |= data.sensordata[
+        self._mj_model.sensor_adr[self._left_foot_right_shin_found_sensor]
+    ] > 0
+    contact_termination |= data.sensordata[
+        self._mj_model.sensor_adr[self._right_foot_left_shin_found_sensor]
+    ] > 0
     return (
         fall_termination
         | contact_termination
