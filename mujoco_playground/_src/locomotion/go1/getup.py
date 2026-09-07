@@ -31,7 +31,6 @@ def default_config() -> config_dict.ConfigDict:
   return config_dict.create(
       ctrl_dt=0.02,
       sim_dt=0.004,
-      control_mode="position",
       Kp=35.0,
       Kd=0.5,
       episode_length=300,
@@ -120,11 +119,7 @@ class Getup(go1_base.Go1Env):
     self._soft_lowers = c - 0.5 * r * self._config.soft_joint_pos_limit_factor
     self._soft_uppers = c + 0.5 * r * self._config.soft_joint_pos_limit_factor
 
-    self._settle_steps = (
-        int(self._config.settle_time / self.sim_dt)
-        if self.control_mode == "position"
-        else 0
-    )
+    self._settle_steps = int(self._config.settle_time / self.sim_dt)
     self._z_des = 0.275
     self._up_vec = jp.array([0.0, 0.0, -1.0])
     self._imu_site_id = self._mj_model.site("imu").id
@@ -183,11 +178,9 @@ class Getup(go1_base.Go1Env):
     )
     data = mjx.forward(self.mjx_model, data)
 
-    # Let the position-controlled robot settle for a few steps. Torque mode
-    # starts from zero control and does not run this position-target phase.
-    if self.control_mode == "position":
-      data = mjx_env.step(self.mjx_model, data, qpos[7:], self._settle_steps)
-      data = data.replace(time=0.0)
+    # Let the robot settle for a few steps.
+    data = mjx_env.step(self.mjx_model, data, qpos[7:], self._settle_steps)
+    data = data.replace(time=0.0)
 
     info = {
         "rng": rng,

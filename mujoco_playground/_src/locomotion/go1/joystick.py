@@ -32,8 +32,7 @@ from mujoco_playground._src.locomotion.go1 import go1_constants as consts
 def default_config() -> config_dict.ConfigDict:
   return config_dict.create(
       ctrl_dt=0.02,
-      sim_dt=0.005,
-      control_mode="position",
+      sim_dt=0.004,
       episode_length=1000,
       Kp=35.0,
       Kd=0.5,
@@ -64,7 +63,7 @@ def default_config() -> config_dict.ConfigDict:
               dof_pos_limits=-1.0,
               pose=0.5,
               # Other.
-              termination=-1.0,
+              termination=-0.0,
               stand_still=-1.0,
               # Regularization.
               torques=-0.0002,
