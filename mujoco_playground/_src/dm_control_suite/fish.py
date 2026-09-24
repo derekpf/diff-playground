@@ -181,7 +181,9 @@ class Swim(mjx_env.MjxEnv):
     in_target = reward.tolerance(
         sj.norm(mouth_to_target_local),
         bounds=(0, self._radii),
-        margin=2 * self._radii, softness=self.reward_softness,
+        margin=2 * self._radii,
+        softness=self.reward_softness,
+        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
     metrics["reward/in_target"] = in_target
@@ -190,7 +192,7 @@ class Swim(mjx_env.MjxEnv):
     is_upright = 0.5 * (upright + 1)
     metrics["reward/upright"] = is_upright
 
-    return (7 * in_target + is_upright) / 8
+    return sj.div(7 * in_target + is_upright, 8)
 
   @property
   def xml_path(self) -> str:

@@ -205,7 +205,13 @@ class Joystick(op3_base.Op3Env):
     rewards = {
         k: v * self._config.reward_config.scales[k] for k, v in rewards.items()
     }
-    reward = sj.clip(sum(rewards.values()) * self.dt, 0.0, 10000.0, softness=self.reward_softness)
+    reward = sj.clip(
+        sum(rewards.values()) * self.dt,
+        0.0,
+        10000.0,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
 
     # Bookkeeping.
     state.info["motor_targets"] = motor_targets
@@ -316,7 +322,7 @@ class Joystick(op3_base.Op3Env):
   ) -> jax.Array:
     # Tracking of linear velocity commands (xy axes).
     lin_vel_error = jp.sum(jp.square(commands[:2] - local_vel[:2]))
-    reward = jp.exp(-lin_vel_error / self._config.reward_config.tracking_sigma)
+    reward = jp.exp(-sj.div(lin_vel_error, self._config.reward_config.tracking_sigma))
     return reward
 
   def _reward_tracking_ang_vel(
@@ -326,7 +332,7 @@ class Joystick(op3_base.Op3Env):
   ) -> jax.Array:
     # Tracking of angular velocity commands (yaw).
     ang_vel_error = jp.square(commands[2] - ang_vel[2])
-    return jp.exp(-ang_vel_error / self._config.reward_config.tracking_sigma)
+    return jp.exp(-sj.div(ang_vel_error, self._config.reward_config.tracking_sigma))
 
   def _cost_lin_vel_z(self, global_linvel) -> jax.Array:
     # Penalize z axis base linear velocity.
@@ -342,13 +348,28 @@ class Joystick(op3_base.Op3Env):
 
   def _cost_torques(self, torques: jax.Array) -> jax.Array:
     # Penalize torques.
-    return sj.norm(torques) + jp.sum(sj.abs(torques, softness=self.reward_softness))
+    return sj.norm(torques) + jp.sum(
+        sj.abs(
+            torques,
+            softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        )
+    )
 
   def _cost_energy(
       self, qvel: jax.Array, qfrc_actuator: jax.Array
   ) -> jax.Array:
     # Penalize energy consumption.
-    return jp.sum(sj.abs(qvel, softness=self.reward_softness) * sj.abs(qfrc_actuator, softness=self.reward_softness))
+    return jp.sum(
+        sj.abs(
+            qvel, softness=self.reward_softness, st_enable=self.reward_st_enable
+        )
+        * sj.abs(
+            qfrc_actuator,
+            softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        )
+    )
 
   def _cost_action_rate(
       self, act: jax.Array, last_act: jax.Array, last_last_act: jax.Array
@@ -368,17 +389,30 @@ class Joystick(op3_base.Op3Env):
     del global_linvel, ang_vel  # Unused.
     cmd_norm = sj.norm(commands)
     penalty = jp.sum(jp.square(action))
-    return penalty * sj.less(cmd_norm, 0.1, softness=self.reward_softness)
+    return penalty * sj.less(
+        cmd_norm,
+        0.1,
+        softness=self.bool_softness,
+        st_enable=self.reward_st_enable,
+    )
     # penalty = jp.sum(jp.square(global_linvel[:2]))
-    # cmd_norm = jp.linalg.norm(commands[:2])
+    # cmd_norm = sj.norm(commands[:2])
     # cost_linvel = penalty * (cmd_norm < 0.1)
     # penalty = jp.sum(jp.square(ang_vel[:2]))
-    # cmd_norm = jp.linalg.norm(commands[2])
+    # cmd_norm = sj.norm(commands[2])
     # cost_angvel = penalty * (cmd_norm < 0.1)
     # return cost_linvel + cost_angvel
 
   def _cost_termination(self, done: jax.Array, step: jax.Array) -> jax.Array:
-    return done & (step < 500)
+    return sj.logical_and(
+        done,
+        sj.less(
+            step,
+            500,
+            softness=self.bool_softness,
+            st_enable=self.reward_st_enable,
+        ),
+    )
 
   def _cost_feet_slip(self, data: mjx.Data) -> jax.Array:
     feet_vel = data.sensordata[self._foot_linvel_sensor_adr]
@@ -394,22 +428,30 @@ class Joystick(op3_base.Op3Env):
         for sensor_id in self._right_feet_floor_found_sensor
     ])
     feet_contact = jp.hstack([
-        sj.any(sj.greater_st(
-            left_contact_values, 0.0, softness=self.reward_softness,
-            st_enable=self.reward_st_enable,
-        )),
-        sj.any(sj.greater_st(
-            right_contact_values, 0.0, softness=self.reward_softness,
-            st_enable=self.reward_st_enable,
-        )),
+        sj.any(
+            sj.greater(
+                left_contact_values,
+                0.0,
+                softness=self.bool_softness,
+                st_enable=self.reward_st_enable,
+            )
+        ),
+        sj.any(
+            sj.greater(
+                right_contact_values,
+                0.0,
+                softness=self.bool_softness,
+                st_enable=self.reward_st_enable,
+            )
+        ),
     ])
     return jp.sum(vel_xy_norm_sq * feet_contact)
 
   def _cost_feet_clearance(self, data: mjx.Data) -> jax.Array:
     feet_vel = data.sensordata[self._foot_linvel_sensor_adr]
     vel_xy = feet_vel[..., :2]
-    vel_norm = jp.sqrt(sj.norm(vel_xy, axis=-1))
-    # vel_norm = jp.linalg.norm(vel_xy, axis=-1)
+    vel_norm = sj.sqrt(sj.norm(vel_xy, axis=-1))
+    # vel_norm = sj.norm(vel_xy, axis=-1)
     foot_pos = data.site_xpos[self._feet_site_id]
     foot_z = foot_pos[..., -1]
     delta = (foot_z - self._config.max_foot_height) ** 2

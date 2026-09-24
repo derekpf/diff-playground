@@ -49,40 +49,37 @@ def _with_softness(fn, softness_position):
   return wrapped
 
 
-def _with_st_enable(st_fn, soft_fn, softness_position):
-  """Selects straight-through or ordinary behavior for an adapter."""
+def _with_st_enable(fn, st_fn, softness_position):
+  """Selects ordinary or straight-through gradients for a soft operation."""
 
+  wrapped = _with_softness(fn, softness_position)
   wrapped_st = _with_softness(st_fn, softness_position)
-  wrapped_soft = _with_softness(soft_fn, softness_position)
 
-  @functools.wraps(st_fn)
-  def wrapped(*args, st_enable: bool = True, **kwargs):
-    fn = wrapped_st if st_enable else wrapped_soft
-    return fn(*args, **kwargs)
+  @functools.wraps(fn)
+  def select(*args, st_enable: bool = False, **kwargs):
+    return (wrapped_st if st_enable else wrapped)(*args, **kwargs)
 
-  return wrapped
+  return select
 
 
 # Keep the external softjax argument order while providing the project default
 # when callers omit softness.
-abs = _with_softness(_softjax.abs, 1)
-clip = _with_softness(_softjax.clip, 3)
-greater = _with_softness(_softjax.greater, 2)
-greater_st = _with_st_enable(_softjax.greater_st, greater, 2)
-greater_equal = _with_softness(_softjax.greater_equal, 2)
-greater_equal_st = _with_st_enable(_softjax.greater_equal_st, greater_equal, 2)
-less = _with_softness(_softjax.less, 2)
-less_st = _with_st_enable(_softjax.less_st, less, 2)
-less_equal = _with_softness(_softjax.less_equal, 2)
-less_equal_st = _with_st_enable(_softjax.less_equal_st, less_equal, 2)
-max = _with_softness(_softjax.max, 3)
-max_st = _with_st_enable(_softjax.st(_softjax.max), max, 3)
-min = _with_softness(_softjax.min, 3)
-min_st = _with_st_enable(_softjax.st(_softjax.min), min, 3)
-relu = _with_softness(_softjax.relu, 1)
-relu_st = _with_st_enable(_softjax.st(_softjax.relu), relu, 1)
-abs_st = _with_st_enable(_softjax.st(_softjax.abs), abs, 1)
-clip_st = _with_st_enable(_softjax.st(_softjax.clip), clip, 3)
+abs = _with_st_enable(_softjax.abs, _softjax.abs_st, 1)
+abs_st = _with_softness(_softjax.abs_st, 1)
+clip = _with_st_enable(_softjax.clip, _softjax.clip_st, 3)
+greater = _with_st_enable(_softjax.greater, _softjax.greater_st, 2)
+greater_st = _with_softness(_softjax.greater_st, 2)
+greater_equal = _with_st_enable(_softjax.greater_equal, _softjax.greater_equal_st, 2)
+greater_equal_st = _with_softness(_softjax.greater_equal_st, 2)
+less = _with_st_enable(_softjax.less, _softjax.less_st, 2)
+less_st = _with_softness(_softjax.less_st, 2)
+less_equal = _with_st_enable(_softjax.less_equal, _softjax.less_equal_st, 2)
+less_equal_st = _with_softness(_softjax.less_equal_st, 2)
+max = _with_st_enable(_softjax.max, _softjax.max_st, 3)
+max_st = _with_softness(_softjax.st(_softjax.max), 3)
+min = _with_st_enable(_softjax.min, _softjax.min_st, 3)
+relu = _with_st_enable(_softjax.relu, _softjax.relu_st, 1)
+relu_st = _with_softness(_softjax.relu_st, 1)
 
 # Operations without a softness argument are passed through unchanged.
 all = _softjax.all
@@ -90,8 +87,10 @@ any = _softjax.any
 arccos = _softjax.arccos
 arcsin = _softjax.arcsin
 div = _softjax.div
+log = _softjax.log
 logical_and = _softjax.logical_and
 logical_not = _softjax.logical_not
 logical_or = _softjax.logical_or
 norm = _softjax.norm
+sqrt = _softjax.sqrt
 where = _softjax.where

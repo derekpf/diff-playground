@@ -152,16 +152,18 @@ class PlanarWalker(mjx_env.MjxEnv):
     standing = reward.tolerance(
         torso_height,
         bounds=(_STAND_HEIGHT, float("inf")),
-        margin=_STAND_HEIGHT / 2, softness=self.reward_softness,
+        margin=sj.div(_STAND_HEIGHT, 2),
+        softness=self.reward_softness,
+        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
     metrics["reward/standing"] = standing
 
     torso_upright = data.xmat[self._torso_id, 2, 2]  # zz component.
-    upright = (1 + torso_upright) / 2
+    upright = sj.div(1 + torso_upright, 2)
     metrics["reward/upright"] = upright
 
-    stand_reward = (3 * standing + upright) / 4
+    stand_reward = sj.div(3 * standing + upright, 4)
     metrics["reward/stand"] = stand_reward
 
     return stand_reward
@@ -181,14 +183,16 @@ class PlanarWalker(mjx_env.MjxEnv):
     move_reward = reward.tolerance(
         horizontal_velocity,
         bounds=(self._move_speed, float("inf")),
-        margin=self._move_speed / 2,
+        margin=sj.div(self._move_speed, 2),
         value_at_margin=0.5,
-        sigmoid="linear", softness=self.reward_softness,
+        sigmoid="linear",
+        softness=self.reward_softness,
+        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
     metrics["reward/move"] = move_reward
 
-    return stand_reward * (5 * move_reward + 1) / 6
+    return sj.div(stand_reward * (5 * move_reward + 1), 6)
 
   @property
   def xml_path(self) -> str:

@@ -157,8 +157,11 @@ class Reacher(mjx_env.MjxEnv):
   ) -> jax.Array:
     del action, info, metrics  # Unused.
     return reward.tolerance(
-        self._finger_to_target_dist(data), (0, self._radii),
-        softness=self.reward_softness, st_enable=self.reward_st_enable,
+        self._finger_to_target_dist(data),
+        (0, self._radii),
+        softness=self.reward_softness,
+        bool_softness=self.bool_softness,
+        st_enable=self.reward_st_enable,
     )
 
   def _finger_to_target(self, data: mjx.Data) -> jax.Array:

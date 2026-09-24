@@ -112,8 +112,17 @@ class BallInCup(mjx_env.MjxEnv):
     del action, metrics, info  # Unused.
     target = data.site_xpos[self._target_site_id, [0, 2]]
     ball = data.xpos[self._ball_body_id, [0, 2]]
-    ball_to_target = sj.abs(target - ball, softness=self.reward_softness)
-    inside = sj.less(ball_to_target, self._target_size - self._ball_size, softness=self.reward_softness)
+    ball_to_target = sj.abs(
+        target - ball,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
+    inside = sj.less(
+        ball_to_target,
+        self._target_size - self._ball_size,
+        softness=self.bool_softness,
+        st_enable=self.reward_st_enable,
+    )
     return sj.all(inside, axis=-1)
 
   @property

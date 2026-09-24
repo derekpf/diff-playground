@@ -237,18 +237,28 @@ class JoystickGaitTracking(h1_base.H1Env):
     right_feet_contact = right_contact_values > 0
     contact = jp.hstack([jp.any(left_feet_contact), jp.any(right_feet_contact)])
     contact_reward = jp.hstack([
-        sj.any(sj.greater_st(
-            left_contact_values, 0.0, softness=self.reward_softness,
-            st_enable=self.reward_st_enable,
-        )),
-        sj.any(sj.greater_st(
-            right_contact_values, 0.0, softness=self.reward_softness,
-            st_enable=self.reward_st_enable,
-        )),
+        sj.any(
+            sj.greater(
+                left_contact_values,
+                0.0,
+                softness=self.bool_softness,
+                st_enable=self.reward_st_enable,
+            )
+        ),
+        sj.any(
+            sj.greater(
+                right_contact_values,
+                0.0,
+                softness=self.bool_softness,
+                st_enable=self.reward_st_enable,
+            )
+        ),
     ])
     first_contact_reward = sj.logical_and(
-        sj.greater_st(
-            state.info["feet_air_time"], 0.0, softness=self.reward_softness,
+        sj.greater(
+            state.info["feet_air_time"],
+            0.0,
+            softness=self.bool_softness,
             st_enable=self.reward_st_enable,
         ),
         sj.logical_or(contact_reward, state.info["last_contact"]),
@@ -257,7 +267,10 @@ class JoystickGaitTracking(h1_base.H1Env):
     p_f = data.site_xpos[self._feet_site_id]
     p_fz = p_f[..., -1]
     state.info["swing_peak"] = sj.max(
-        jp.stack([state.info["swing_peak"], p_fz]), axis=0, softness=self.reward_softness
+        jp.stack([state.info["swing_peak"], p_fz]),
+        axis=0,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
     )
 
     obs = self._get_obs(data, state.info, noise_rng, contact)
@@ -278,7 +291,11 @@ class JoystickGaitTracking(h1_base.H1Env):
     # r_pos = sum(pos.values())
     # r_neg = jp.exp(0.2 * sum(neg.values()))
     # reward = r_pos * r_neg * self.dt
-    reward = sj.relu(sum(rewards.values()) * self.dt, softness=self.reward_softness)
+    reward = sj.relu(
+        sum(rewards.values()) * self.dt,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
 
     state.info["last_last_act"] = state.info["last_act"]
     state.info["last_act"] = action
@@ -424,9 +441,14 @@ class JoystickGaitTracking(h1_base.H1Env):
     # Reward for tracking the desired foot height.
     foot_pos = data.site_xpos[self._feet_site_id]
     foot_z = foot_pos[..., -1]
-    rz = gait.get_rz(phase, swing_height=foot_height, softness=self.reward_softness)
+    rz = gait.get_rz(
+        phase,
+        swing_height=foot_height,
+        softness=self.bool_softness,
+        st_enable=self.reward_st_enable,
+    )
     error = jp.sum(jp.square(foot_z - rz))
-    return jp.exp(-error / 0.01)
+    return jp.exp(-sj.div(error, 0.01))
 
   def _reward_tracking_lin_vel(
       self,
@@ -435,7 +457,7 @@ class JoystickGaitTracking(h1_base.H1Env):
   ) -> jax.Array:
     # Tracking of linear velocity commands (xy axes).
     lin_vel_error = jp.sum(jp.square(commands[:2] - local_vel[:2]))
-    reward = jp.exp(-lin_vel_error / self._config.reward_config.tracking_sigma)
+    reward = jp.exp(-sj.div(lin_vel_error, self._config.reward_config.tracking_sigma))
     return reward
 
   def _reward_tracking_ang_vel(
@@ -445,7 +467,7 @@ class JoystickGaitTracking(h1_base.H1Env):
   ) -> jax.Array:
     # Tracking of angular velocity commands (yaw).
     ang_vel_error = jp.square(commands[2] - ang_vel[2])
-    return jp.exp(-ang_vel_error / self._config.reward_config.tracking_sigma)
+    return jp.exp(-sj.div(ang_vel_error, self._config.reward_config.tracking_sigma))
 
   def _reward_feet_air_time(
       self, air_time: jax.Array, first_contact: jax.Array, commands: jax.Array
@@ -453,7 +475,12 @@ class JoystickGaitTracking(h1_base.H1Env):
     # Reward air time.
     cmd_norm = sj.norm(commands[:2])
     rew_air_time = jp.sum((air_time - 0.1) * first_contact)
-    rew_air_time *= sj.greater(cmd_norm, 0.05, softness=self.reward_softness)  # No reward for zero commands.
+    rew_air_time *= sj.greater(
+        cmd_norm,
+        0.05,
+        softness=self.bool_softness,
+        st_enable=self.reward_st_enable,
+    )  # No reward for zero commands.
     return rew_air_time
 
   def _cost_pose(self, joint_angles: jax.Array) -> jax.Array:
@@ -464,8 +491,10 @@ class JoystickGaitTracking(h1_base.H1Env):
   def _cost_lin_vel_z(self, global_linvel, gait: jax.Array) -> jax.Array:  # pylint: disable=redefined-outer-name
     # Penalize z axis base linear velocity unless pronk or bound.
     cost = jp.square(global_linvel[2])
-    return cost * sj.greater_st(
-        gait, 0, softness=self.reward_softness,
+    return cost * sj.greater(
+        gait,
+        0,
+        softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
 

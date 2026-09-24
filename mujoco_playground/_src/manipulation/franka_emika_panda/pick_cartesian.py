@@ -316,8 +316,10 @@ class PandaPickCubeCartesian(pick.PandaPickCube):
     hand_box_value = data.sensordata[
         self._mj_model.sensor_adr[self._box_hand_found_sensor]
     ]
-    raw_rewards['no_box_collision'] = sj.less_equal_st(
-        hand_box_value, 0.0, softness=self.reward_softness,
+    raw_rewards['no_box_collision'] = sj.less_equal(
+        hand_box_value,
+        0.0,
+        softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
     rewards = {
@@ -325,7 +327,13 @@ class PandaPickCubeCartesian(pick.PandaPickCube):
         for k, v in raw_rewards.items()
     }
 
-    total_reward = sj.clip(sum(rewards.values()), -1e4, 1e4, softness=self.reward_softness)
+    total_reward = sj.clip(
+        sum(rewards.values()),
+        -1e4,
+        1e4,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
 
     if not self._vision:
       # Vision policy cannot access the required state-based observations.
@@ -336,7 +344,15 @@ class PandaPickCubeCartesian(pick.PandaPickCube):
 
     # Sparse rewards
     box_pos = data.xpos[self._obj_body]
-    lifted = sj.greater(box_pos[2], 0.05, softness=self.reward_softness) * self._config.reward_config.lifted_reward
+    lifted = (
+        sj.greater(
+            box_pos[2],
+            0.05,
+            softness=self.bool_softness,
+            st_enable=self.reward_st_enable,
+        )
+        * self._config.reward_config.lifted_reward
+    )
     total_reward += lifted
     success = self._get_success(data, state.info)
     success_reward = self._get_success_reward(data, state.info)
@@ -344,13 +360,20 @@ class PandaPickCubeCartesian(pick.PandaPickCube):
 
     # Reward progress
     reward = sj.max(
-        jp.stack([total_reward - state.info['prev_reward'], jp.zeros_like(total_reward)]), softness=self.reward_softness
+        jp.stack([
+            total_reward - state.info['prev_reward'],
+            jp.zeros_like(total_reward),
+        ]),
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
     )
     state.info['prev_reward'] = sj.max(
         jp.stack([
             total_reward,
             state.info['prev_reward'],
-        ]), softness=self.reward_softness
+        ]),
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
     )
     reward = sj.where(newly_reset, 0.0, reward)  # Prevent first-step artifact
 
@@ -412,7 +435,10 @@ class PandaPickCubeCartesian(pick.PandaPickCube):
     if self._vision:
       box_pos, target_pos = box_pos[2], target_pos[2]
     return sj.less(
-        sj.norm(box_pos - target_pos), self._config.success_threshold, softness=self.reward_softness
+        sj.norm(box_pos - target_pos),
+        self._config.success_threshold,
+        softness=self.bool_softness,
+        st_enable=self.reward_st_enable,
     )
 
   def _move_tip(

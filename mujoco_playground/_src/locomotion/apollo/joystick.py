@@ -347,11 +347,11 @@ class Joystick(base.ApolloEnv):
         jp.square(commands[:2] - info["filtered_linvel"][:2])
     )
     r_linvel = jp.exp(
-        -lin_vel_error / self._config.reward_config.tracking_sigma
+        -sj.div(lin_vel_error, self._config.reward_config.tracking_sigma)
     )
     ang_vel_error = jp.square(commands[2] - info["filtered_angvel"][2])
     r_angvel = jp.exp(
-        -ang_vel_error / self._config.reward_config.tracking_sigma
+        -sj.div(ang_vel_error, self._config.reward_config.tracking_sigma)
     )
     return r_linvel + 0.5 * r_angvel
 
@@ -365,13 +365,25 @@ class Joystick(base.ApolloEnv):
     return jp.sum(jp.square(torso_zaxis[:2]))
 
   def _cost_torques(self, torques: jax.Array) -> jax.Array:
-    return jp.sum(sj.abs(torques, softness=self.reward_softness))
+    return jp.sum(
+        sj.abs(
+            torques,
+            softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        )
+    )
 
   def _cost_energy(
       self, qvel: jax.Array, qfrc_actuator: jax.Array
   ) -> jax.Array:
     torques = sj.div(qfrc_actuator, self._actuator_torques)
-    return jp.sum(sj.abs(qvel[6:] * torques, softness=self.reward_softness))
+    return jp.sum(
+        sj.abs(
+            qvel[6:] * torques,
+            softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        )
+    )
 
   def _cost_action_rate(self, act: jax.Array, last_act: jax.Array) -> jax.Array:
     return jp.sum(jp.square(act - last_act))
@@ -387,8 +399,10 @@ class Joystick(base.ApolloEnv):
         data.sensordata[adr[self._left_thigh_right_thigh_found_sensor]],
     ])
     return sj.any(
-        sj.greater_st(
-            c, 0.0, softness=self.reward_softness,
+        sj.greater(
+            c,
+            0.0,
+            softness=self.bool_softness,
             st_enable=self.reward_st_enable,
         ),
         axis=-1,
@@ -397,13 +411,31 @@ class Joystick(base.ApolloEnv):
   def _cost_pose(self, qpos: jax.Array, commands: jax.Array) -> jax.Array:
     # Uniform weights when standing still.
     weights = sj.where(
-        sj.less(sj.norm(commands), 0.01, softness=self.reward_softness),
+        sj.less(
+            sj.norm(commands),
+            0.01,
+            softness=self.bool_softness,
+            st_enable=self.reward_st_enable,
+        ),
         jp.ones_like(self._weights),
         self._weights,
     )
     # Reduce hip roll weight when lateral command is high.
-    lateral_cmd = sj.abs(commands[1], softness=self.reward_softness)
-    hip_roll_weight = sj.where(sj.greater(lateral_cmd, 0.3, softness=self.reward_softness), 0.01, 1.0)
+    lateral_cmd = sj.abs(
+        commands[1],
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
+    hip_roll_weight = sj.where(
+        sj.greater(
+            lateral_cmd,
+            0.3,
+            softness=self.bool_softness,
+            st_enable=self.reward_st_enable,
+        ),
+        0.01,
+        1.0,
+    )
     weights = weights.at[21].set(hip_roll_weight)
     weights = weights.at[27].set(hip_roll_weight)
     return jp.sum(jp.square(qpos[7:] - self._init_q[7:]) * weights)
@@ -411,10 +443,13 @@ class Joystick(base.ApolloEnv):
   def _reward_feet_phase(self, data: mjx.Data, phase: jax.Array) -> jax.Array:
     foot_z = data.site_xpos[self._feet_site_id][..., -1]
     rz = gait.get_rz(
-        phase, swing_height=self._config.reward_config.max_foot_height, softness=self.reward_softness
+        phase,
+        swing_height=self._config.reward_config.max_foot_height,
+        softness=self.bool_softness,
+        st_enable=self.reward_st_enable,
     )
     error = jp.sum(jp.square(foot_z - rz))
-    return jp.exp(-error / 0.01)
+    return jp.exp(-sj.div(error, 0.01))
 
   def sample_command(self, rng: jax.Array, x_k: jax.Array) -> jax.Array:
     rng, y_rng, w_rng, z_rng = jax.random.split(rng, 4)

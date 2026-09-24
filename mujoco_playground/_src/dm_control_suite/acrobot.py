@@ -124,7 +124,9 @@ class Balance(mjx_env.MjxEnv):
     return reward.tolerance(
         self._to_target(data),
         bounds=(0.0, self._target_radius),
-        margin=self._margin, softness=self.reward_softness,
+        margin=self._margin,
+        softness=self.reward_softness,
+        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
 

@@ -36,6 +36,7 @@ def get_rz(
     phi: Union[jax.Array, float],
     swing_height: Union[jax.Array, float] = 0.08,
     softness: float = 0.0,
+    st_enable: bool = False,
 ) -> jax.Array:
   def cubic_bezier_interpolation(y_start, y_end, x):
     y_diff = y_end - y_start
@@ -45,7 +46,9 @@ def get_rz(
   x = (phi + jp.pi) / (2 * jp.pi)
   stance = cubic_bezier_interpolation(0, swing_height, 2 * x)
   swing = cubic_bezier_interpolation(swing_height, 0, 2 * x - 1)
-  return sj.where(sj.less_equal(x, 0.5, softness=softness), stance, swing)
+  return sj.where(
+      sj.less_equal(x, 0.5, softness=softness, st_enable=st_enable), stance, swing
+  )
 
 
 # Foot order:"FR", "FL", "RR", "RL".

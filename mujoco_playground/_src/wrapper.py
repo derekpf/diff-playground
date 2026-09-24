@@ -59,6 +59,14 @@ class Wrapper(mjx_env.MjxEnv):
     self.env.reward_softness = value
 
   @property
+  def bool_softness(self) -> float:
+    return self.env.bool_softness
+
+  @bool_softness.setter
+  def bool_softness(self, value: float) -> None:
+    self.env.bool_softness = value
+
+  @property
   def reward_st_enable(self) -> bool:
     return self.env.reward_st_enable
 
@@ -111,6 +119,7 @@ def wrap_for_brax_training(
         Callable[[mjx.Model], Tuple[mjx.Model, mjx.Model]]
     ] = None,
     full_reset: bool = False,
+    model_sync_paths: Sequence[str] = (),
 ) -> Wrapper:
   """Common wrapper pattern for all brax training agents.
 
@@ -123,6 +132,9 @@ def wrap_for_brax_training(
     full_reset: whether to call `env.reset` during `env.step` on done rather
       than resetting to a cached first state. Setting full_reset=True may
       increase wallclock time because it forces full resets to random states.
+    model_sync_paths: dot-separated model paths whose current values are copied
+      from the raw model into the randomized model before each reset and step.
+      These paths must not be vectorized by `randomization_fn`.
 
   Returns:
     An environment that is wrapped with Episode and AutoReset wrappers.  If the
@@ -135,7 +147,9 @@ def wrap_for_brax_training(
   if randomization_fn is None:
     env = brax_training.VmapWrapper(env)  # pytype: disable=wrong-arg-types
   else:
-    env = BraxDomainRandomizationVmapWrapper(env, randomization_fn)
+    env = BraxDomainRandomizationVmapWrapper(
+        env, randomization_fn, model_sync_paths=model_sync_paths
+    )
   env = brax_training.EpisodeWrapper(env, episode_length, action_repeat)
   env = BraxAutoResetWrapper(env, full_reset=full_reset)
   return env
@@ -236,9 +250,51 @@ class BraxDomainRandomizationVmapWrapper(Wrapper):
       self,
       env: mjx_env.MjxEnv,
       randomization_fn: Callable[[mjx.Model], Tuple[mjx.Model, mjx.Model]],
+      model_sync_paths: Sequence[str] = (),
   ):
     super().__init__(env)
     self._mjx_model_v, self._in_axes = randomization_fn(self.mjx_model)
+    self._model_sync_paths = tuple(model_sync_paths)
+    self._validate_model_sync_paths()
+
+  @staticmethod
+  def _get_model_path(model: mjx.Model, path: str):
+    value = model
+    for field in path.split('.'):
+      value = getattr(value, field)
+    return value
+
+  def _validate_model_sync_paths(self) -> None:
+    for path in self._model_sync_paths:
+      if not path or any(not field for field in path.split('.')):
+        raise ValueError(
+            'model_sync_paths must contain non-empty dot-separated paths; '
+            f'got {path!r}.'
+        )
+
+      try:
+        self._get_model_path(self.mjx_model, path)
+        in_axes = self._get_model_path(self._in_axes, path)
+      except AttributeError as error:
+        raise ValueError(
+            f'model_sync_paths contains unknown model path {path!r}.'
+        ) from error
+
+      if in_axes is not None:
+        raise ValueError(
+            f'model_sync_paths path {path!r} must be shared across the '
+            'vmap axis (its in_axes value must be None).'
+        )
+
+  def _model_for_rollout(self) -> mjx.Model:
+    if not self._model_sync_paths:
+      return self._mjx_model_v
+
+    updates = {
+        path: self._get_model_path(self.mjx_model, path)
+        for path in self._model_sync_paths
+    }
+    return self._mjx_model_v.tree_replace(updates)
 
   @contextlib.contextmanager
   def v_env_fn(self, mjx_model: mjx.Model):
@@ -255,7 +311,9 @@ class BraxDomainRandomizationVmapWrapper(Wrapper):
       with self.v_env_fn(mjx_model) as v_env:
         return v_env.reset(rng)
 
-    state = jax.vmap(reset, in_axes=[self._in_axes, 0])(self._mjx_model_v, rng)
+    state = jax.vmap(reset, in_axes=[self._in_axes, 0])(
+        self._model_for_rollout(), rng
+    )
     return state
 
   def step(self, state: mjx_env.State, action: jax.Array) -> mjx_env.State:
@@ -264,6 +322,6 @@ class BraxDomainRandomizationVmapWrapper(Wrapper):
         return v_env.step(s, a)
 
     res = jax.vmap(step, in_axes=[self._in_axes, 0, 0])(
-        self._mjx_model_v, state, action
+        self._model_for_rollout(), state, action
     )
     return res

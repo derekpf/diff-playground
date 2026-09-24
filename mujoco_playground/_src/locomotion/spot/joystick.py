@@ -238,13 +238,17 @@ class Joystick(spot_base.SpotEnv):
         for sensor_id in self._feet_floor_found_sensor
     ])
     contact = contact_values > 0
-    contact_reward = sj.greater_st(
-        contact_values, 0.0, softness=self.reward_softness,
+    contact_reward = sj.greater(
+        contact_values,
+        0.0,
+        softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
     first_contact_reward = sj.logical_and(
-        sj.greater_st(
-            state.info["feet_air_time"], 0.0, softness=self.reward_softness,
+        sj.greater(
+            state.info["feet_air_time"],
+            0.0,
+            softness=self.bool_softness,
             st_enable=self.reward_st_enable,
         ),
         sj.logical_or(contact_reward, state.info["last_contact"]),
@@ -253,7 +257,10 @@ class Joystick(spot_base.SpotEnv):
     p_f = data.site_xpos[self._feet_site_id]
     p_fz = p_f[..., -1]
     state.info["swing_peak"] = sj.max(
-        jp.stack([state.info["swing_peak"], p_fz]), axis=0, softness=self.reward_softness
+        jp.stack([state.info["swing_peak"], p_fz]),
+        axis=0,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
     )
 
     obs = self._get_obs(data, state.info, noise_rng)
@@ -271,7 +278,13 @@ class Joystick(spot_base.SpotEnv):
     rewards = {
         k: v * self._config.reward_config.scales[k] for k, v in rewards.items()
     }
-    reward = sj.clip(sum(rewards.values()) * self.dt, 0.0, 10000.0, softness=self.reward_softness)
+    reward = sj.clip(
+        sum(rewards.values()) * self.dt,
+        0.0,
+        10000.0,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
 
     state.info["last_last_act"] = state.info["last_act"]
     state.info["last_act"] = action
@@ -447,7 +460,12 @@ class Joystick(spot_base.SpotEnv):
     cost = jp.sum(jp.square(joint_angles - self._default_pose) * self._weights)
     cmd_norm = sj.norm(commands)
     weight = sj.where(
-        sj.less(cmd_norm, 0.01, softness=self.reward_softness),
+        sj.less(
+            cmd_norm,
+            0.01,
+            softness=self.bool_softness,
+            st_enable=self.reward_st_enable,
+        ),
         -10.0,
         0.0,
     )
@@ -460,7 +478,7 @@ class Joystick(spot_base.SpotEnv):
   ) -> jax.Array:
     # Tracking of linear velocity commands (xy axes).
     lin_vel_error = jp.sum(jp.square(commands[:2] - local_vel[:2]))
-    return jp.exp(-lin_vel_error / self._config.reward_config.tracking_sigma)
+    return jp.exp(-sj.div(lin_vel_error, self._config.reward_config.tracking_sigma))
 
   def _reward_tracking_ang_vel(
       self,
@@ -469,7 +487,7 @@ class Joystick(spot_base.SpotEnv):
   ) -> jax.Array:
     # Tracking of angular velocity commands (yaw).
     ang_vel_error = jp.square(commands[2] - ang_vel[2])
-    return jp.exp(-ang_vel_error / self._config.reward_config.tracking_sigma)
+    return jp.exp(-sj.div(ang_vel_error, self._config.reward_config.tracking_sigma))
 
   # Base-related rewards.
 
@@ -491,13 +509,28 @@ class Joystick(spot_base.SpotEnv):
 
   def _cost_torques(self, torques: jax.Array) -> jax.Array:
     # Penalize torques.
-    return sj.norm(torques) + jp.sum(sj.abs(torques, softness=self.reward_softness))
+    return sj.norm(torques) + jp.sum(
+        sj.abs(
+            torques,
+            softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        )
+    )
 
   def _cost_energy(
       self, qvel: jax.Array, qfrc_actuator: jax.Array
   ) -> jax.Array:
     # Penalize energy consumption.
-    return jp.sum(sj.abs(qvel, softness=self.reward_softness) * sj.abs(qfrc_actuator, softness=self.reward_softness))
+    return jp.sum(
+        sj.abs(
+            qvel, softness=self.reward_softness, st_enable=self.reward_st_enable
+        )
+        * sj.abs(
+            qfrc_actuator,
+            softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        )
+    )
 
   def _cost_action_rate(
       self, act: jax.Array, info: dict[str, Any]
@@ -523,12 +556,16 @@ class Joystick(spot_base.SpotEnv):
   def _cost_feet_clearance(self, data: mjx.Data) -> jax.Array:
     feet_vel = data.sensordata[self._foot_linvel_sensor_adr]
     vel_xy = feet_vel[..., :2]
-    vel_norm = jp.sqrt(sj.norm(vel_xy, axis=-1))
+    vel_norm = sj.sqrt(sj.norm(vel_xy, axis=-1))
     foot_pos = data.site_xpos[self._feet_site_id]
     foot_z = foot_pos[..., -1]
     # TODO(kevin): Desired foot height should be proportional to the command.
-    # desired_z = 0.05 + jp.linalg.norm(command[:2]) * 0.1
-    delta = sj.abs(foot_z - self._config.reward_config.max_foot_height, softness=self.reward_softness)
+    # desired_z = 0.05 + sj.norm(command[:2]) * 0.1
+    delta = sj.abs(
+        foot_z - self._config.reward_config.max_foot_height,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
     return jp.sum(delta * vel_norm)
 
   def _cost_feet_height(
@@ -540,7 +577,12 @@ class Joystick(spot_base.SpotEnv):
     cmd_norm = sj.norm(command)
     error = sj.div(swing_peak, self._config.reward_config.max_foot_height) - 1.0
     cost = jp.sum(jp.square(error) * first_contact)
-    cost *= sj.greater_equal(cmd_norm, 0.01, softness=self.reward_softness)  # No penalty for zero commands.
+    cost *= sj.greater_equal(
+        cmd_norm,
+        0.01,
+        softness=self.bool_softness,
+        st_enable=self.reward_st_enable,
+    )  # No penalty for zero commands.
     return cost
 
   def _reward_feet_air_time(
@@ -549,14 +591,22 @@ class Joystick(spot_base.SpotEnv):
     # Reward air time.
     cmd_norm = sj.norm(commands)
     rew_air_time = jp.sum((air_time - 0.1) * first_contact)
-    rew_air_time *= sj.greater_equal(cmd_norm, 0.01, softness=self.reward_softness)  # No reward for zero commands.
+    rew_air_time *= sj.greater_equal(
+        cmd_norm,
+        0.01,
+        softness=self.bool_softness,
+        st_enable=self.reward_st_enable,
+    )  # No reward for zero commands.
     return rew_air_time
 
   def _cost_feet_phase(self, data: mjx.Data, phase: jax.Array) -> jax.Array:
     foot_pos = data.site_xpos[self._feet_site_id]
     foot_z = foot_pos[..., -1]
     rz = gait.get_rz(
-        phase, swing_height=self._config.reward_config.max_foot_height, softness=self.reward_softness
+        phase,
+        swing_height=self._config.reward_config.max_foot_height,
+        softness=self.bool_softness,
+        st_enable=self.reward_st_enable,
     )
     return jp.sum(jp.square(foot_z - rz))
 

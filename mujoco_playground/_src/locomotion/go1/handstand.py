@@ -218,7 +218,13 @@ class Handstand(go1_base.Go1Env):
     rewards = {
         k: v * self._config.reward_config.scales[k] for k, v in rewards.items()
     }
-    reward = sj.clip(sum(rewards.values()) * self.dt, 0.0, 10000.0, softness=self.reward_softness)
+    reward = sj.clip(
+        sum(rewards.values()) * self.dt,
+        0.0,
+        10000.0,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
 
     state.info["step"] += 1
     state.info["last_act"] = action
@@ -357,9 +363,13 @@ class Handstand(go1_base.Go1Env):
     return jp.square(normalized)
 
   def _reward_height(self, torso_height: jax.Array) -> jax.Array:
-    height = sj.min(jp.array([torso_height, self._z_des]), softness=self.reward_softness)
+    height = sj.min(
+        jp.array([torso_height, self._z_des]),
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
     error = self._z_des - height
-    return jp.exp(-error / 1.0)
+    return jp.exp(-sj.div(error, 1.0))
 
   def _cost_contact(self, data: mjx.Data) -> jax.Array:
     feet_contact = jp.array([
@@ -367,8 +377,10 @@ class Handstand(go1_base.Go1Env):
         for sensorid in self._feet_floor_found_sensor
     ])
     return sj.any(
-        sj.greater_st(
-            feet_contact, 0.0, softness=self.reward_softness,
+        sj.greater(
+            feet_contact,
+            0.0,
+            softness=self.bool_softness,
             st_enable=self.reward_st_enable,
         ),
         axis=-1,
@@ -383,7 +395,16 @@ class Handstand(go1_base.Go1Env):
   def _cost_energy(
       self, qvel: jax.Array, qfrc_actuator: jax.Array
   ) -> jax.Array:
-    return jp.sum(sj.abs(qvel, softness=self.reward_softness) * sj.abs(qfrc_actuator, softness=self.reward_softness))
+    return jp.sum(
+        sj.abs(
+            qvel, softness=self.reward_softness, st_enable=self.reward_st_enable
+        )
+        * sj.abs(
+            qfrc_actuator,
+            softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        )
+    )
 
   def _cost_action_rate(
       self, act: jax.Array, info: dict[str, Any]
@@ -391,8 +412,16 @@ class Handstand(go1_base.Go1Env):
     return jp.sum(jp.square(act - info["last_act"]))
 
   def _cost_joint_pos_limits(self, qpos: jax.Array) -> jax.Array:
-    out_of_limits = sj.relu(self._soft_lowers - qpos, softness=self.reward_softness)
-    out_of_limits += sj.relu(qpos - self._soft_uppers, softness=self.reward_softness)
+    out_of_limits = sj.relu(
+        self._soft_lowers - qpos,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
+    out_of_limits += sj.relu(
+        qpos - self._soft_uppers,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
     return jp.sum(out_of_limits)
 
   def _cost_dof_acc(self, qacc: jax.Array) -> jax.Array:

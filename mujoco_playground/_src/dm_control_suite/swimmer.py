@@ -213,7 +213,9 @@ class Swim(mjx_env.MjxEnv):
         self._nose_to_target_dist(data),
         bounds=(0, self._target_size),
         margin=5 * self._target_size,
-        sigmoid="long_tail", softness=self.reward_softness,
+        sigmoid="long_tail",
+        softness=self.reward_softness,
+        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
 

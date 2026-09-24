@@ -55,13 +55,15 @@ class _SoftnessEnv(MjxEnv):
     raise NotImplementedError
 
   def reward(self, value):
-    return sj.relu(value, softness=self.reward_softness)
+    return sj.relu(
+        value, softness=self.reward_softness, st_enable=self.reward_st_enable
+    )
 
   def comparison_reward(self, value):
-    return sj.greater_st(
+    return sj.greater(
         value,
         0.0,
-        softness=self.reward_softness,
+        softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
 
@@ -70,9 +72,9 @@ class SoftjaxTest(absltest.TestCase):
 
   def test_softness(self):
     self.assertNotIn("reward_softness", MjxEnv.__dict__)
-    self.assertNotIn("reward_st_enable", MjxEnv.__dict__)
     env = _SoftnessEnv()
     self.assertEqual(env.reward_softness, 0.0)
+    self.assertEqual(env.bool_softness, 0.0)
     self.assertFalse(env.reward_st_enable)
 
   def test_reward_softness_is_instance_scoped(self):
@@ -99,54 +101,27 @@ class SoftjaxTest(absltest.TestCase):
         wrapped.reward(0.0), 0.1 * np.log(2.0), rtol=1e-5
     )
 
-  def test_reward_st_enable_is_instance_scoped(self):
+  def test_boolean_softness_and_st_mode_are_instance_scoped(self):
     first = _SoftnessEnv()
     second = _SoftnessEnv()
-    first.reward_st_enable = True
-
-    self.assertTrue(first.reward_st_enable)
-    self.assertFalse(second.reward_st_enable)
-
-  def test_wrapper_delegates_reward_st_enable(self):
-    env = _SoftnessEnv()
-    wrapped = wrapper.Wrapper(env)
-
-    self.assertFalse(wrapped.reward_st_enable)
+    wrapped = wrapper.Wrapper(first)
+    wrapped.bool_softness = 0.1
     wrapped.reward_st_enable = True
 
-    self.assertTrue(env.reward_st_enable)
-    self.assertTrue(wrapped.reward_st_enable)
+    self.assertEqual(first.bool_softness, 0.1)
+    self.assertTrue(first.reward_st_enable)
+    self.assertEqual(second.bool_softness, 0.0)
+    self.assertFalse(second.reward_st_enable)
+    self.assertEqual(float(wrapped.comparison_reward(-0.01)), 0.0)
+    self.assertGreater(float(jax.grad(wrapped.comparison_reward)(-0.01)), 0.0)
+    self.assertEqual(float(second.comparison_reward(-0.01)), 0.0)
 
-  def test_st_enable_selects_forward_behavior(self):
-    env = _SoftnessEnv()
-    env.reward_softness = 0.1
-
-    value, gradient = jax.jit(jax.value_and_grad(env.comparison_reward))(
-        jp.array(0.0)
-    )
-    self.assertGreater(float(value), 0.0)
-    self.assertLess(float(value), 1.0)
-    self.assertNotEqual(float(gradient), 0.0)
-
-    env.reward_st_enable = True
-    value, gradient = jax.jit(jax.value_and_grad(env.comparison_reward))(
-        jp.array(0.0)
-    )
-    np.testing.assert_allclose(value, 0.0)
-    self.assertNotEqual(float(gradient), 0.0)
-
-  def test_zero_softness_is_hard_and_finite_in_both_modes(self):
-    for st_enable in (False, True):
-      with self.subTest(st_enable=st_enable):
-        env = _SoftnessEnv()
-        env.reward_st_enable = st_enable
-        value, gradient = jax.jit(jax.value_and_grad(env.comparison_reward))(
-            jp.array(0.0)
-        )
-        self.assertTrue(np.isfinite(value))
-        self.assertTrue(np.isfinite(gradient))
-        np.testing.assert_allclose(value, 0.0)
-        np.testing.assert_allclose(gradient, 0.0)
+  def test_st_enable_changes_forward_value_and_keeps_gradient(self):
+    soft = lambda x: sj.relu(x, softness=0.1, st_enable=False)
+    straight_through = lambda x: sj.relu(x, softness=0.1, st_enable=True)
+    self.assertGreater(float(soft(-0.01)), 0.0)
+    self.assertEqual(float(straight_through(-0.01)), 0.0)
+    self.assertGreater(float(jax.grad(straight_through)(-0.01)), 0.0)
 
   def test_standalone_wrappers_use_the_default_softness(self):
     np.testing.assert_allclose(sj.relu(0.0), 0.0, rtol=1e-5)
@@ -178,76 +153,6 @@ class SoftjaxTest(absltest.TestCase):
     np.testing.assert_allclose(sj.less(0.0, 0.01), expected, rtol=1e-5)
     np.testing.assert_allclose(sj.less_equal(0.0, 0.01), expected, rtol=1e-5)
 
-  def test_st_comparisons_have_hard_forward_and_soft_gradients(self):
-    comparisons = (
-        (sj.greater_st, (0.0, 0.0, 1.0)),
-        (sj.greater_equal_st, (0.0, 1.0, 1.0)),
-        (sj.less_st, (1.0, 0.0, 0.0)),
-        (sj.less_equal_st, (1.0, 1.0, 0.0)),
-    )
-    for comparison, expected in comparisons:
-      with self.subTest(comparison=comparison.__name__):
-        values = comparison(
-            jp.array([-1.0, 0.0, 1.0]), 0.0, softness=0.01
-        )
-        np.testing.assert_allclose(values, expected)
-        _, gradient = jax.jvp(
-            lambda x: comparison(x, 0.0, softness=0.01),
-            (jp.array(0.0),),
-            (jp.array(1.0),),
-        )
-        self.assertNotEqual(float(gradient), 0.0)
-
-  def test_st_comparisons_honor_explicit_softness(self):
-    comparisons = (
-        sj.greater_st,
-        sj.greater_equal_st,
-        sj.less_st,
-        sj.less_equal_st,
-    )
-    for comparison in comparisons:
-      with self.subTest(comparison=comparison.__name__):
-        gradients = []
-        for softness in (0.1, 1.0):
-          _, gradient = jax.jvp(
-              lambda x: comparison(x, 0.0, softness=softness),
-              (jp.array(0.0),),
-              (jp.array(1.0),),
-          )
-          gradients.append(float(gradient))
-        self.assertNotEqual(gradients[0], gradients[1])
-
-        positional_gradient = jax.jvp(
-            lambda x: comparison(x, 0.0, 0.1),
-            (jp.array(0.0),),
-            (jp.array(1.0),),
-        )[1]
-        np.testing.assert_allclose(positional_gradient, gradients[0])
-
-  def test_st_reward_primitives_have_hard_forward_values(self):
-    np.testing.assert_allclose(
-        sj.abs_st(-0.05, softness=0.1), 0.05, rtol=1e-5
-    )
-    np.testing.assert_allclose(
-        sj.clip_st(0.0, 0.0, 10000.0, softness=0.1), 0.0, rtol=1e-5
-    )
-    values = jp.array([-1.0, 1.0])
-    np.testing.assert_allclose(sj.max_st(values, softness=0.1), 1.0)
-    np.testing.assert_allclose(sj.min_st(values, softness=0.1), -1.0)
-    np.testing.assert_allclose(sj.relu_st(0.0, softness=0.1), 0.0)
-
-    np.testing.assert_allclose(
-        sj.clip_st(0.0, 0.0, 10000.0, softness=0.1, st_enable=False),
-        0.1 * np.log(2.0),
-        rtol=1e-5,
-    )
-    _, gradient = jax.jvp(
-        lambda x: sj.clip_st(x, 0.0, 10000.0, softness=0.1),
-        (jp.array(0.0),),
-        (jp.array(1.0),),
-    )
-    self.assertNotEqual(float(gradient), 0.0)
-
   def test_reductions(self):
     values = jp.array([0.0, 0.01])
     np.testing.assert_allclose(sj.max(values), 0.01, rtol=1e-5)
@@ -255,12 +160,29 @@ class SoftjaxTest(absltest.TestCase):
     np.testing.assert_allclose(
         sj.any(sj.greater(jp.zeros(4), 0.0)), 0.0, rtol=1e-5
     )
-    np.testing.assert_allclose(
-        sj.any(sj.greater_st(jp.zeros(4), 0.0)), 0.0, atol=1e-5
-    )
 
   def test_relu(self):
     np.testing.assert_allclose(sj.relu(0.0), 0.0, rtol=1e-5)
+
+  def test_autograd_safe_primitives_are_finite_at_boundaries(self):
+    cases = (
+        ("sqrt", sj.sqrt, jp.array(0.0), 0.0),
+        ("log", sj.log, jp.array(0.0), 0.0),
+        ("div", lambda x: sj.div(1.0, x), jp.array(0.0), 0.0),
+        ("norm", sj.norm, jp.zeros(2), 0.0),
+    )
+    for name, function, value, expected in cases:
+      with self.subTest(name=name):
+        result, gradient = jax.jit(jax.value_and_grad(function))(value)
+        self.assertTrue(np.all(np.isfinite(result)))
+        self.assertTrue(np.all(np.isfinite(gradient)))
+        np.testing.assert_allclose(result, expected)
+
+  def test_autograd_safe_primitives_preserve_forward_values(self):
+    np.testing.assert_allclose(sj.sqrt(4.0), 2.0)
+    np.testing.assert_allclose(sj.log(1.0), 0.0)
+    np.testing.assert_allclose(sj.div(1.0, 2.0), 0.5)
+    np.testing.assert_allclose(sj.norm(jp.array([3.0, 4.0])), 5.0)
 
   def test_modes_are_forwarded(self):
     self.assertEqual(sj.clip(0.0, 0.0, 10000.0, mode="hard"), 0.0)

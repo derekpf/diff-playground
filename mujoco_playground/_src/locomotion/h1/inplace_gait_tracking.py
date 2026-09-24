@@ -24,6 +24,7 @@ import numpy as np
 
 from mujoco_playground._src import gait
 from mujoco_playground._src import mjx_env
+from mujoco_playground._src import softjax as sj
 from mujoco_playground._src.locomotion.h1 import base as h1_base
 from mujoco_playground._src.locomotion.h1 import h1_constants as consts
 
@@ -367,9 +368,14 @@ class InplaceGaitTracking(h1_base.H1Env):
     # Reward for tracking the desired foot height.
     foot_pos = data.site_xpos[self._feet_site_id]
     foot_z = foot_pos[..., -1]
-    rz = gait.get_rz(phase, swing_height=foot_height, softness=self.reward_softness)
+    rz = gait.get_rz(
+        phase,
+        swing_height=foot_height,
+        softness=self.bool_softness,
+        st_enable=self.reward_st_enable,
+    )
     error = jp.sum(jp.square(foot_z - rz))
-    return jp.exp(-error / 0.1)
+    return jp.exp(-sj.div(error, 0.1))
 
   def _cost_pose(self, joint_angles: jax.Array) -> jax.Array:
     # Penalize deviation from the default pose for certain joints.

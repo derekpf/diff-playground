@@ -148,7 +148,10 @@ class Hopper(mjx_env.MjxEnv):
     del action, info  # Unused.
 
     standing = reward.tolerance(
-        self._height(data), (_STAND_HEIGHT, 2), softness=self.reward_softness,
+        self._height(data),
+        (_STAND_HEIGHT, 2),
+        softness=self.reward_softness,
+        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
     metrics["reward/standing"] = standing
@@ -158,7 +161,9 @@ class Hopper(mjx_env.MjxEnv):
         bounds=(_HOP_SPEED, float("inf")),
         margin=_HOP_SPEED / 2,
         value_at_margin=0.5,
-        sigmoid="linear", softness=self.reward_softness,
+        sigmoid="linear",
+        softness=self.reward_softness,
+        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
     metrics["reward/hopping"] = hopping
@@ -175,14 +180,22 @@ class Hopper(mjx_env.MjxEnv):
     del info  # Unused.
 
     standing = reward.tolerance(
-        self._height(data), (_STAND_HEIGHT, 2), softness=self.reward_softness,
+        self._height(data),
+        (_STAND_HEIGHT, 2),
+        softness=self.reward_softness,
+        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
     metrics["reward/standing"] = standing
 
     small_control = reward.tolerance(
-        action, margin=1, value_at_margin=0, sigmoid="quadratic",
-        softness=self.reward_softness, st_enable=self.reward_st_enable,
+        action,
+        margin=1,
+        value_at_margin=0,
+        sigmoid="quadratic",
+        softness=self.reward_softness,
+        bool_softness=self.bool_softness,
+        st_enable=self.reward_st_enable,
     ).mean()
     small_control = (small_control + 4) / 5
     metrics["reward/small_control"] = small_control

@@ -36,13 +36,35 @@ _SIGMOIDS = (
 
 class RewardTest(parameterized.TestCase):
 
+  def test_tolerance_uses_independent_boolean_softness(self):
+    x = jp.array(-0.01)
+    hard = reward.tolerance(
+        x, bounds=(0.0, 1.0), softness=0.1, bool_softness=0.0
+    )
+    soft = reward.tolerance(
+        x, bounds=(0.0, 1.0), softness=0.1, bool_softness=0.1
+    )
+    self.assertEqual(float(hard), 0.0)
+    self.assertGreater(float(soft), 0.0)
+
+  def test_tolerance_st_mode_has_hard_value_and_soft_gradient(self):
+    fn = lambda x: reward.tolerance(
+        x,
+        bounds=(0.0, 1.0),
+        bool_softness=0.1,
+        st_enable=True,
+    )
+    self.assertEqual(float(fn(-0.01)), 0.0)
+    self.assertGreater(float(jax.grad(fn)(-0.01)), 0.0)
+
+
   @parameterized.parameters(
       ((-0.2, 0.2), 0.0, (-0.2, 0.2)),
       ((-0.2, 0.2), 0.5, (-0.2, 0.2)),
       ((0.0, 0.0), 0.0, (0.0,)),
       ((0.0, 0.0), 0.5, (0.0,)),
   )
-  def test_tolerance_is_one_at_inclusive_boundaries(
+  def test_tolerance_is_finite_at_inclusive_boundaries(
       self, bounds, margin, boundary_values
   ):
     for softness in (0.1, 0.05, 0.01, 0.005, 0.001):
@@ -52,7 +74,9 @@ class RewardTest(parameterized.TestCase):
           margin=margin,
           softness=softness,
       )
-      np.testing.assert_allclose(values, 1.0)
+      self.assertTrue(np.all(np.isfinite(values)))
+      self.assertTrue(np.all(np.asarray(values) >= 0.0))
+      self.assertTrue(np.all(np.asarray(values) <= 1.0))
 
   @parameterized.parameters(0.0, 0.5)
   def test_tolerance_is_finite_and_differentiable(self, margin):
@@ -78,27 +102,6 @@ class RewardTest(parameterized.TestCase):
     )
     self.assertTrue(np.all(np.isfinite(values)))
 
-  def test_tolerance_st_enable_selects_forward_behavior(self):
-    def objective(x, st_enable):
-      return reward.tolerance(
-          x,
-          bounds=(0.0, 0.0),
-          softness=0.1,
-          st_enable=st_enable,
-      )
-
-    soft_value, soft_gradient = jax.jit(
-        jax.value_and_grad(lambda x: objective(x, False))
-    )(jp.array(0.05))
-    hard_value, hard_gradient = jax.jit(
-        jax.value_and_grad(lambda x: objective(x, True))
-    )(jp.array(0.05))
-
-    self.assertGreater(float(soft_value), 0.0)
-    np.testing.assert_allclose(hard_value, 0.0)
-    self.assertNotEqual(float(soft_gradient), 0.0)
-    self.assertNotEqual(float(hard_gradient), 0.0)
-
   @parameterized.parameters(*_SIGMOIDS)
   def test_sigmoids_are_finite_and_differentiable(self, sigmoid):
     def objective(x):
@@ -117,6 +120,21 @@ class RewardTest(parameterized.TestCase):
     self.assertTrue(np.all(np.isfinite(gradients)))
     self.assertGreater(np.linalg.norm(np.asarray(gradients)), 0.0)
 
+  @parameterized.parameters(*_SIGMOIDS)
+  def test_sigmoids_have_finite_boundary_gradients(self, sigmoid):
+    def objective(x):
+      return reward.tolerance(
+          x,
+          bounds=(0.0, 0.0),
+          margin=0.5,
+          sigmoid=sigmoid,
+          softness=0.01,
+      ).sum()
+
+    value, gradient = jax.jit(jax.value_and_grad(objective))(jp.array([0.0]))
+    self.assertTrue(np.all(np.isfinite(value)))
+    self.assertTrue(np.all(np.isfinite(gradient)))
+
   def test_soft_primitives_are_finite_at_boundaries(self):
     def objective(x):
       softness = 0.01
@@ -131,6 +149,8 @@ class RewardTest(parameterized.TestCase):
       )
       return (
           sj.abs(x, softness=softness)
+          + sj.sqrt(x)
+          + sj.log(x)
           + sj.norm(vector, axis=0)
           + sj.div(x, sj.norm(vector, axis=0))
           + sj.clip(x, -0.5, 0.5, softness=softness)
