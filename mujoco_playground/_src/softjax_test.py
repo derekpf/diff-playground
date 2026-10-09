@@ -188,6 +188,43 @@ class SoftjaxTest(absltest.TestCase):
     self.assertEqual(sj.clip(0.0, 0.0, 10000.0, mode="hard"), 0.0)
     self.assertEqual(sj.relu(-1.0, mode="hard"), 0.0)
 
+  def test_selection_surrogates_are_monotone_across_user_settings(self):
+    for softness in (1e-4, .01, .1, 1.0):
+      for operation, sign in ((sj.max, -1.), (sj.min, 1.)):
+        values = jp.array([0., sign * .25 * softness])
+        gradients = []
+        for st in (False, True):
+          fn = lambda x: operation(
+              x, softness=softness, standardize=False,
+              gated_grad=False, st_enable=st)
+          gradient = jax.grad(fn)(values)
+          self.assertTrue(np.all(np.isfinite(gradient)))
+          self.assertTrue(np.all(gradient >= 0.))
+          self.assertTrue(np.all(gradient <= 1.))
+          np.testing.assert_allclose(gradient.sum(), 1., rtol=1e-6)
+          if st:
+            self.assertEqual(float(fn(values)), 0.)
+          gradients.append(gradient)
+        np.testing.assert_array_equal(*gradients)
+
+  def test_ungated_boundary_surrogates_are_monotone_across_user_settings(self):
+    for softness in (1e-4, .01, .1, 1.0):
+      values = softness * jp.linspace(-2., 6., 33)
+      for operation in (
+          lambda x, st: sj.relu(x, softness=softness, gated=False,
+                                st_enable=st),
+          lambda x, st: sj.clip(x, 0., 4. * softness, softness=softness,
+                                gated=False, st_enable=st),
+      ):
+        gradients = []
+        for st in (False, True):
+          gradient = jax.vmap(jax.grad(lambda x: operation(x, st)))(values)
+          self.assertTrue(np.all(np.isfinite(gradient)))
+          self.assertTrue(np.all(gradient >= 0.))
+          self.assertTrue(np.all(gradient <= 1.))
+          gradients.append(gradient)
+        np.testing.assert_array_equal(*gradients)
+
 
 if __name__ == "__main__":
   absltest.main()

@@ -266,7 +266,7 @@ class Joystick(t1_base.T1Env):
         "last_last_act": jp.zeros(self.mjx_model.nu),
         "motor_targets": jp.zeros(self.mjx_model.nu),
         "feet_air_time": jp.zeros(2),
-        "last_contact": jp.zeros(2, dtype=bool),
+        "last_contact": jp.zeros(2, dtype=data.sensordata.dtype),
         "swing_peak": jp.zeros(2),
         # Phase related.
         "phase_dt": phase_dt,
@@ -381,6 +381,8 @@ class Joystick(t1_base.T1Env):
         jp.stack([state.info["swing_peak"], p_fz]),
         axis=0,
         softness=self.reward_softness,
+        standardize=False,
+        gated_grad=True,
         st_enable=self.reward_st_enable,
     )
 
@@ -430,9 +432,9 @@ class Joystick(t1_base.T1Env):
         0,
         state.info["step"],
     )
-    state.info["feet_air_time"] *= ~contact
-    state.info["last_contact"] = contact
-    state.info["swing_peak"] *= ~contact
+    state.info["feet_air_time"] *= 1.0 - contact_reward
+    state.info["last_contact"] = contact_reward
+    state.info["swing_peak"] *= 1.0 - contact_reward
     for k, v in rewards.items():
       state.metrics[f"reward/{k}"] = v
     state.metrics["swing_peak"] = jp.mean(state.info["swing_peak"])

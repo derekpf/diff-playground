@@ -249,7 +249,7 @@ class Joystick(berkeley_humanoid_base.BerkeleyHumanoidEnv):
         "last_last_act": jp.zeros(self.mjx_model.nu),
         "motor_targets": jp.zeros(self.mjx_model.nu),
         "feet_air_time": jp.zeros(2),
-        "last_contact": jp.zeros(2, dtype=bool),
+        "last_contact": jp.zeros(2, dtype=data.sensordata.dtype),
         "swing_peak": jp.zeros(2),
         # Phase related.
         "phase_dt": phase_dt,
@@ -305,8 +305,7 @@ class Joystick(berkeley_humanoid_base.BerkeleyHumanoidEnv):
         data.sensordata[self._mj_model.sensor_adr[sensor_id]]
         for sensor_id in self._feet_floor_found_sensor
     ])
-    contact = contact_values > 0
-    contact_reward = sj.greater(
+    contact = sj.greater(
         contact_values,
         0.0,
         softness=self.bool_softness,
@@ -319,7 +318,7 @@ class Joystick(berkeley_humanoid_base.BerkeleyHumanoidEnv):
             softness=self.bool_softness,
             st_enable=self.reward_st_enable,
         ),
-        sj.logical_or(contact_reward, state.info["last_contact"]),
+        sj.logical_or(contact, state.info["last_contact"]),
     )
     state.info["feet_air_time"] += self.dt
     p_f = data.site_xpos[self._feet_site_id]
@@ -328,6 +327,8 @@ class Joystick(berkeley_humanoid_base.BerkeleyHumanoidEnv):
         jp.stack([state.info["swing_peak"], p_fz]),
         axis=0,
         softness=self.reward_softness,
+        standardize=False,
+        gated_grad=True,
         st_enable=self.reward_st_enable,
     )
 
@@ -341,7 +342,7 @@ class Joystick(berkeley_humanoid_base.BerkeleyHumanoidEnv):
         state.metrics,
         done,
         first_contact_reward,
-        contact_reward,
+        contact,
     )
     rewards = {
         k: v * self._config.reward_config.scales[k] for k, v in rewards.items()
@@ -372,9 +373,9 @@ class Joystick(berkeley_humanoid_base.BerkeleyHumanoidEnv):
         0,
         state.info["step"],
     )
-    state.info["feet_air_time"] *= ~contact
+    state.info["feet_air_time"] *= 1.0 - contact
     state.info["last_contact"] = contact
-    state.info["swing_peak"] *= ~contact
+    state.info["swing_peak"] *= 1.0 - contact
     for k, v in rewards.items():
       state.metrics[f"reward/{k}"] = v
     state.metrics["swing_peak"] = jp.mean(state.info["swing_peak"])

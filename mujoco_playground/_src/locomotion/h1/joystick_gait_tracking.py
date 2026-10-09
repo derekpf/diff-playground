@@ -188,7 +188,7 @@ class JoystickGaitTracking(h1_base.H1Env):
         "qvel_history": qvel_history,
         "swing_peak": jp.zeros(2),
         "feet_air_time": jp.zeros(2),
-        "last_contact": jp.zeros(2, dtype=bool),
+        "last_contact": jp.zeros(2, dtype=data.sensordata.dtype),
         "lin_vel": jp.zeros(3),
         "ang_vel": jp.zeros(3),
         "gait_freq": gait_freq,
@@ -226,11 +226,11 @@ class JoystickGaitTracking(h1_base.H1Env):
     state.info["motor_targets"] = motor_targets
 
     left_contact_values = jp.array([
-        data.sensordata[sensorid]
+        data.sensordata[self._mj_model.sensor_adr[sensorid]]
         for sensorid in self._left_foot_floor_found_sensor
     ])
     right_contact_values = jp.array([
-        data.sensordata[sensorid]
+        data.sensordata[self._mj_model.sensor_adr[sensorid]]
         for sensorid in self._right_foot_floor_found_sensor
     ])
     left_feet_contact = left_contact_values > 0
@@ -270,6 +270,8 @@ class JoystickGaitTracking(h1_base.H1Env):
         jp.stack([state.info["swing_peak"], p_fz]),
         axis=0,
         softness=self.reward_softness,
+        standardize=False,
+        gated_grad=True,
         st_enable=self.reward_st_enable,
     )
 
@@ -303,9 +305,9 @@ class JoystickGaitTracking(h1_base.H1Env):
     phase_tp1 = state.info["phase"] + state.info["phase_dt"]
     state.info["phase"] = jp.fmod(phase_tp1 + jp.pi, 2 * jp.pi) - jp.pi
     state.info["rng"] = rng
-    state.info["feet_air_time"] *= ~contact
-    state.info["last_contact"] = contact
-    state.info["swing_peak"] *= ~contact
+    state.info["feet_air_time"] *= 1.0 - contact_reward
+    state.info["last_contact"] = contact_reward
+    state.info["swing_peak"] *= 1.0 - contact_reward
 
     state.info["command"] = jp.where(
         state.info["step"] > 500,

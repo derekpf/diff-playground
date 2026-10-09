@@ -233,6 +233,8 @@ class PandaPickCube(panda.PandaBase):
             ),
         ]),
         softness=self.reward_softness,
+        standardize=False,
+        gated_grad=True,
         st_enable=self.reward_st_enable,
     )
 

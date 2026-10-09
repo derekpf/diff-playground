@@ -223,7 +223,7 @@ class Joystick(mjx_env.MjxEnv):
         "last_act": jp.zeros(self.mjx_model.nu),
         "last_vel": jp.zeros(self.mjx_model.nv - 6),
         "command": self.sample_command(cmd_rng),
-        "last_contact": jp.zeros(len(_FEET_SITES), dtype=bool),
+        "last_contact": jp.zeros(len(_FEET_SITES), dtype=data.sensordata.dtype),
         "feet_air_time": jp.zeros(len(_FEET_SITES)),
         "kick_wait_steps": kick_wait_steps,
         "kick_duration_steps": kick_duration_steps,
@@ -264,7 +264,8 @@ class Joystick(mjx_env.MjxEnv):
         ]
         for sensor in self._feet_floor_found_sensor
     ])
-    contact = contact_values > 0
+    contact = sj.greater(
+        contact_values, 0.0, softness=self.bool_softness, st_enable=self.reward_st_enable)
     first_contact_reward = sj.logical_and(
         sj.greater(
             state.info["feet_air_time"],
@@ -272,15 +273,7 @@ class Joystick(mjx_env.MjxEnv):
             softness=self.bool_softness,
             st_enable=self.reward_st_enable,
         ),
-        sj.logical_or(
-            sj.greater(
-                contact_values,
-                0.0,
-                softness=self.bool_softness,
-                st_enable=self.reward_st_enable,
-            ),
-            state.info["last_contact"],
-        ),
+        sj.logical_or(contact, state.info["last_contact"]),
     )
     state.info["feet_air_time"] += self.dt
 
@@ -308,7 +301,7 @@ class Joystick(mjx_env.MjxEnv):
     state.info["last_vel"] = joint_vel
     state.info["step"] += 1
     state.info["rng"] = rng
-    state.info["feet_air_time"] *= ~contact
+    state.info["feet_air_time"] *= 1.0 - contact
     state.info["last_contact"] = contact
     state.info["command"] = jp.where(
         state.info["step"] > 500,

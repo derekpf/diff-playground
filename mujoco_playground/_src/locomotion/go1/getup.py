@@ -348,6 +348,8 @@ class Getup(go1_base.Go1Env):
     height = sj.min(
         jp.array([torso_height, self._z_des]),
         softness=self.reward_softness,
+        standardize=False,
+        gated_grad=True,
         st_enable=self.reward_st_enable,
     )
     height_error = self._z_des - height
@@ -366,6 +368,8 @@ class Getup(go1_base.Go1Env):
     height = sj.min(
         jp.array([torso_height, self._z_des]),
         softness=self.reward_softness,
+        standardize=False,
+        gated_grad=True,
         st_enable=self.reward_st_enable,
     )
     return jp.exp(height) - 1.0

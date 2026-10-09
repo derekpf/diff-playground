@@ -175,6 +175,8 @@ class HandOver(aloha_base.AlohaEnv):
             [potential - state.info['prev_potential'], jp.zeros_like(potential)]
         ),
         softness=self.reward_softness,
+        standardize=False,
+        gated_grad=True,
         st_enable=self.reward_st_enable,
     )
 
@@ -191,6 +193,8 @@ class HandOver(aloha_base.AlohaEnv):
     state.info['prev_potential'] = sj.max(
         jp.stack([potential, state.info['prev_potential']]),
         softness=self.reward_softness,
+        standardize=False,
+        gated_grad=True,
         st_enable=self.reward_st_enable,
     )
     reward = sj.where(sj.logical_not(newly_reset), reward, 0.0)
@@ -271,6 +275,8 @@ class HandOver(aloha_base.AlohaEnv):
     box_handover = sj.max(
         jp.stack([box_handover, hand_handover]),
         softness=self.reward_softness,
+        standardize=False,
+        gated_grad=True,
         st_enable=self.reward_st_enable,
     )
 

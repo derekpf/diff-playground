@@ -366,6 +366,8 @@ class Handstand(go1_base.Go1Env):
     height = sj.min(
         jp.array([torso_height, self._z_des]),
         softness=self.reward_softness,
+        standardize=False,
+        gated_grad=True,
         st_enable=self.reward_st_enable,
     )
     error = self._z_des - height

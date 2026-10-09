@@ -280,6 +280,8 @@ class Balance(mjx_env.MjxEnv):
             st_enable=self.reward_st_enable,
         ),
         softness=self.reward_softness,
+        standardize=False,
+        gated_grad=True,
         st_enable=self.reward_st_enable,
     )
     small_velocity = (1 + small_velocity) / 2

@@ -365,6 +365,8 @@ class PandaPickCubeCartesian(pick.PandaPickCube):
             jp.zeros_like(total_reward),
         ]),
         softness=self.reward_softness,
+        standardize=False,
+        gated_grad=True,
         st_enable=self.reward_st_enable,
     )
     state.info['prev_reward'] = sj.max(
@@ -373,6 +375,8 @@ class PandaPickCubeCartesian(pick.PandaPickCube):
             state.info['prev_reward'],
         ]),
         softness=self.reward_softness,
+        standardize=False,
+        gated_grad=True,
         st_enable=self.reward_st_enable,
     )
     reward = sj.where(newly_reset, 0.0, reward)  # Prevent first-step artifact
