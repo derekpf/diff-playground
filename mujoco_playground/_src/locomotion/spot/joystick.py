@@ -573,7 +573,10 @@ class Joystick(spot_base.SpotEnv):
   def _cost_feet_clearance(self, data: mjx.Data) -> jax.Array:
     feet_vel = data.sensordata[self._foot_linvel_sensor_adr]
     vel_xy = feet_vel[..., :2]
-    vel_norm = sj.sqrt(sj.norm(vel_xy, axis=-1))
+
+    eps = 0.05
+    speed = sj.sqrt(jp.sum(vel_xy**2, axis=-1) + eps**2)
+    sqrt_speed = sj.sqrt(speed) - sj.sqrt(eps)
     foot_pos = data.site_xpos[self._feet_site_id]
     foot_z = foot_pos[..., -1]
     # TODO(kevin): Desired foot height should be proportional to the command.
@@ -583,7 +586,7 @@ class Joystick(spot_base.SpotEnv):
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
-    return jp.sum(delta * vel_norm)
+    return jp.sum(delta * sqrt_speed)
 
   def _cost_feet_height(
       self,
