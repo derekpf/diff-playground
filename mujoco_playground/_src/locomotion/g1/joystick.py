@@ -668,6 +668,7 @@ class Joystick(g1_base.G1Env):
         - self._config.reward_config.max_contact_force,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
+        gated=False,
     )
     cost += sj.relu(
         sj.abs(
@@ -678,6 +679,7 @@ class Joystick(g1_base.G1Env):
         - self._config.reward_config.max_contact_force,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
+        gated=False,
     )
     return cost
 
@@ -745,11 +747,13 @@ class Joystick(g1_base.G1Env):
         self._soft_lowers - qpos,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
+        gated=False,
     )
     out_of_limits += sj.relu(
         qpos - self._soft_uppers,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
+        gated=False,
     )
     return jp.sum(out_of_limits)
 
@@ -904,6 +908,7 @@ class Joystick(g1_base.G1Env):
         air_time - (threshold_max - threshold_min),
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
+        gated=False,
     )
     reward = jp.sum(air_time)
     return reward

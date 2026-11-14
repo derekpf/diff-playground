@@ -285,6 +285,7 @@ class Joystick(spot_base.SpotEnv):
         10000.0,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
+        gated=False,
     )
 
     state.info["last_last_act"] = state.info["last_act"]

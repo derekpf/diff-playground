@@ -56,7 +56,10 @@ class _SoftnessEnv(MjxEnv):
 
   def reward(self, value):
     return sj.relu(
-        value, softness=self.reward_softness, st_enable=self.reward_st_enable
+        value,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+        gated=False,
     )
 
   def comparison_reward(self, value):
@@ -116,28 +119,38 @@ class SoftjaxTest(absltest.TestCase):
     self.assertEqual(float(second.comparison_reward(-0.01)), 0.0)
 
   def test_st_enable_changes_forward_value_and_keeps_gradient(self):
-    soft = lambda x: sj.relu(x, softness=0.1, st_enable=False)
-    straight_through = lambda x: sj.relu(x, softness=0.1, st_enable=True)
+    soft = lambda x: sj.relu(
+        x, softness=0.1, st_enable=False, gated=False
+    )
+    straight_through = lambda x: sj.relu(
+        x, softness=0.1, st_enable=True, gated=False
+    )
     self.assertGreater(float(soft(-0.01)), 0.0)
     self.assertEqual(float(straight_through(-0.01)), 0.0)
     self.assertGreater(float(jax.grad(straight_through)(-0.01)), 0.0)
 
   def test_standalone_wrappers_use_the_default_softness(self):
-    np.testing.assert_allclose(sj.relu(0.0), 0.0, rtol=1e-5)
-    np.testing.assert_allclose(sj.relu(0.0, 0.0), 0.0, rtol=1e-5)
+    np.testing.assert_allclose(sj.relu(0.0, gated=False), 0.0, rtol=1e-5)
+    np.testing.assert_allclose(
+        sj.relu(0.0, 0.0, gated=False), 0.0, rtol=1e-5
+    )
 
   def test_explicit_softness_is_honored(self):
     np.testing.assert_allclose(
-        sj.relu(0.0, softness=0.1), 0.1 * np.log(2.0), rtol=1e-5
+        sj.relu(0.0, softness=0.1, gated=False),
+        0.1 * np.log(2.0),
+        rtol=1e-5,
     )
-    np.testing.assert_allclose(sj.relu(0.0, 0.1), 0.1 * np.log(2.0), rtol=1e-5)
+    np.testing.assert_allclose(
+        sj.relu(0.0, 0.1, gated=False), 0.1 * np.log(2.0), rtol=1e-5
+    )
 
   def test_clip_at_lower_bound(self):
     np.testing.assert_allclose(
-        sj.clip(jp.array(0.0), 0.0, 10000.0), 0.0, rtol=1e-5
+        sj.clip(jp.array(0.0), 0.0, 10000.0, gated=False), 0.0, rtol=1e-5
     )
     np.testing.assert_allclose(
-        sj.clip(jp.array(0.0), 0.0, 10000.0, softness=0.1),
+        sj.clip(jp.array(0.0), 0.0, 10000.0, softness=0.1, gated=False),
         0.0693147,
         rtol=1e-5,
     )
@@ -161,7 +174,7 @@ class SoftjaxTest(absltest.TestCase):
     )
 
   def test_relu(self):
-    np.testing.assert_allclose(sj.relu(0.0), 0.0, rtol=1e-5)
+    np.testing.assert_allclose(sj.relu(0.0, gated=False), 0.0, rtol=1e-5)
 
   def test_autograd_safe_primitives_are_finite_at_boundaries(self):
     cases = (
@@ -184,8 +197,8 @@ class SoftjaxTest(absltest.TestCase):
     np.testing.assert_allclose(sj.norm(jp.array([3.0, 4.0])), 5.0)
 
   def test_modes_are_forwarded(self):
-    self.assertEqual(sj.clip(0.0, 0.0, 10000.0, mode="hard"), 0.0)
-    self.assertEqual(sj.relu(-1.0, mode="hard"), 0.0)
+    self.assertEqual(sj.clip(0.0, 0.0, 10000.0, mode="hard", gated=False), 0.0)
+    self.assertEqual(sj.relu(-1.0, mode="hard", gated=False), 0.0)
 
   def test_selection_surrogates_are_monotone_across_user_settings(self):
     for softness in (1e-4, .01, .1, 1.0):

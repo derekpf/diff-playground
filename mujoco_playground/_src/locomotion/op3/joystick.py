@@ -213,6 +213,7 @@ class Joystick(op3_base.Op3Env):
         10000.0,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
+        gated=False,
     )
 
     # Bookkeeping.

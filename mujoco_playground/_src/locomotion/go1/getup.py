@@ -218,6 +218,7 @@ class Getup(go1_base.Go1Env):
         10000.0,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
+        gated=False,
     )
 
     # Bookkeeping.
@@ -424,11 +425,13 @@ class Getup(go1_base.Go1Env):
         self._soft_lowers - qpos,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
+        gated=False,
     )
     out_of_limits += sj.relu(
         qpos - self._soft_uppers,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
+        gated=False,
     )
     return jp.sum(out_of_limits)
 
@@ -441,6 +444,7 @@ class Getup(go1_base.Go1Env):
         - max_velocity,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
+        gated=False,
     )
     return jp.sum(jp.square(cost))
 

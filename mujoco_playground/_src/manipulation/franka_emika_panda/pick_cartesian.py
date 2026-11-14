@@ -333,6 +333,7 @@ class PandaPickCubeCartesian(pick.PandaPickCube):
         1e4,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
+        gated=False,
     )
 
     if not self._vision:

@@ -359,6 +359,7 @@ class Joystick(berkeley_humanoid_base.BerkeleyHumanoidEnv):
         10000.0,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
+        gated=False,
     )
 
     state.info["push"] = push
@@ -628,11 +629,13 @@ class Joystick(berkeley_humanoid_base.BerkeleyHumanoidEnv):
         self._soft_lowers - qpos,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
+        gated=False,
     )
     out_of_limits += sj.relu(
         qpos - self._soft_uppers,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
+        gated=False,
     )
     return jp.sum(out_of_limits)
 
@@ -749,6 +752,7 @@ class Joystick(berkeley_humanoid_base.BerkeleyHumanoidEnv):
         air_time - (threshold_max - threshold_min),
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
+        gated=False,
     )
     reward = jp.sum(air_time)
     reward *= sj.greater(

@@ -407,6 +407,7 @@ class Joystick(t1_base.T1Env):
         10000.0,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
+        gated=False,
     )
 
     state.info["push"] = push
@@ -694,11 +695,13 @@ class Joystick(t1_base.T1Env):
         self._soft_lowers - qpos,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
+        gated=False,
     )
     out_of_limits += sj.relu(
         qpos - self._soft_uppers,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
+        gated=False,
     )
     return jp.sum(out_of_limits)
 
@@ -825,6 +828,7 @@ class Joystick(t1_base.T1Env):
         air_time - upper,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
+        gated=False,
     )
     reward = jp.sum(air_time)
     reward *= sj.greater(
@@ -879,6 +883,7 @@ class Joystick(t1_base.T1Env):
         0.1,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
+        gated=False,
     )
 
   def sample_command(self, rng: jax.Array) -> jax.Array:

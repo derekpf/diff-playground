@@ -289,6 +289,7 @@ class Joystick(mjx_env.MjxEnv):
         10000.0,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
+        gated=False,
     )
 
     # Bookkeeping.

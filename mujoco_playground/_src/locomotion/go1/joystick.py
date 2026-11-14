@@ -584,11 +584,13 @@ class Joystick(go1_base.Go1Env):
         self._soft_lowers - qpos,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
+        gated=False,
     )
     out_of_limits += sj.relu(
         qpos - self._soft_uppers,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
+        gated=False,
     )
     return jp.sum(out_of_limits)
 

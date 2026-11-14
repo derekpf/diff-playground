@@ -243,6 +243,7 @@ class PandaRobotiqPushCube(panda_robotiq.PandaRobotiqBase):
         1e4,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
+        gated=False,
     )
     reward_scale_sum = sum(
         self._config.reward_config.reward_scales[k] for k in rewards
@@ -517,6 +518,7 @@ class PandaRobotiqPushCube(panda_robotiq.PandaRobotiqBase):
             1.0,
             softness=self.reward_softness,
             st_enable=self.reward_st_enable,
+            gated=False,
         )
     )
     return ori_error

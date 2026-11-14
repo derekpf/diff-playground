@@ -172,6 +172,7 @@ class Getup(spot_base.SpotEnv):
         10000.0,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
+        gated=False,
     )
 
     # Bookkeeping.
@@ -271,6 +272,7 @@ class Getup(spot_base.SpotEnv):
         1.0,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
+        gated=False,
     )
     return sj.less(
         height_error,
@@ -290,6 +292,7 @@ class Getup(spot_base.SpotEnv):
         1.0,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
+        gated=False,
     )
     return 1.0 - error
 

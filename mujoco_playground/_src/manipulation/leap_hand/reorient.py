@@ -463,6 +463,7 @@ class CubeReorient(leap_hand_base.LeapHandEnv):
             1.0,
             softness=self.reward_softness,
             st_enable=self.reward_st_enable,
+            gated=False,
         )
     )
 

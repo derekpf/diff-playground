@@ -297,6 +297,7 @@ class JoystickGaitTracking(h1_base.H1Env):
         sum(rewards.values()) * self.dt,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
+        gated=False,
     )
 
     state.info["last_last_act"] = state.info["last_act"]

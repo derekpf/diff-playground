@@ -172,6 +172,7 @@ class PandaPickCube(panda.PandaBase):
         1e4,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
+        gated=False,
     )
     box_pos = data.xpos[self._obj_body]
     out_of_bounds = jp.any(jp.abs(box_pos) > 1.0)

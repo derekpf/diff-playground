@@ -153,7 +153,7 @@ class RewardTest(parameterized.TestCase):
           + sj.log(x)
           + sj.norm(vector, axis=0)
           + sj.div(x, sj.norm(vector, axis=0))
-          + sj.clip(x, -0.5, 0.5, softness=softness)
+          + sj.clip(x, -0.5, 0.5, softness=softness, gated=False)
           + sj.min(
               jp.stack([x, 0.25 * jp.ones_like(x)]),
               axis=0,
@@ -166,8 +166,8 @@ class RewardTest(parameterized.TestCase):
           )
           + sj.where(comparisons, x, -x)
           + gates
-          + sj.arcsin(sj.clip(x, -1.0, 1.0, softness=softness))
-          + sj.arccos(sj.clip(x, -1.0, 1.0, softness=softness))
+          + sj.arcsin(sj.clip(x, -1.0, 1.0, softness=softness, gated=False))
+          + sj.arccos(sj.clip(x, -1.0, 1.0, softness=softness, gated=False))
       ).sum()
 
     values, gradients = jax.jit(jax.value_and_grad(objective))(
