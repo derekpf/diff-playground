@@ -417,9 +417,12 @@ class Handstand(go1_base.Go1Env):
     return jp.exp(-sj.div(error, 1.0))
 
   def _cost_contact(self, data: mjx.Data) -> jax.Array:
+    # Only the feet that should leave the floor (self._feet_geom_ids); the base
+    # class's _feet_floor_found_sensor covers all four feet.
     feet_contact = jp.array([
         data.sensordata[self._mj_model.sensor_adr[sensorid]]
         for sensorid in self._feet_floor_found_sensor
+        if self._mj_model.sensor_objid[sensorid] in self._feet_geom_ids
     ])
     return sj.any(
         sj.greater(
@@ -511,6 +514,12 @@ class Footstand(Handstand):
     self._unwanted_contact_geom_ids = np.array(
         [self._mj_model.geom(name).id for name in geom_names]
     )
+    # Termination watches the rear legs, which carry the weight here; the
+    # parent's list covers the front legs.
+    self._fullcollision_floor_found_sensor = [
+        self._mj_model.sensor(f"{geom}_floor_found").id
+        for geom in geom_names
+    ]
 
     feet_geom_names = ["FR", "FL"]
     self._feet_geom_ids = np.array(
