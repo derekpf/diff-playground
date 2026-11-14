@@ -46,24 +46,26 @@ class Go1Env(mjx_env.MjxEnv):
       config: config_dict.ConfigDict,
       config_overrides: Optional[Dict[str, Union[str, int, list[Any]]]] = None,
   ) -> None:
-    super().__init__(config.copy_and_resolve_references(), config_overrides)
-    xml_path = epath.Path(xml_path)
+    super().__init__(config, config_overrides)
 
-    self._model_assets = self._get_assets()
+    self._model_assets = get_assets()
     self._mj_model = mujoco.MjModel.from_xml_string(
         epath.Path(xml_path).read_text(), assets=self._model_assets
     )
-    self._mj_model.opt.timestep = self.sim_dt
+    self._mj_model.opt.timestep = self._config.sim_dt
     self._mj_model.opt.ccd_iterations = 20
 
-    self._configure_model()
+    # Modify PD gains.
+    self._mj_model.dof_damping[6:] = config.Kd
+    self._mj_model.actuator_gainprm[:, 0] = config.Kp
+    self._mj_model.actuator_biasprm[:, 1] = -config.Kp
 
     # Increase offscreen framebuffer size to render at higher resolutions.
     self._mj_model.vis.global_.offwidth = 3840
     self._mj_model.vis.global_.offheight = 2160
 
     self._mjx_model = mjx.put_model(self._mj_model, impl=self._config.impl)
-    self._xml_path = xml_path.as_posix()
+    self._xml_path = xml_path
     self._imu_site_id = self._mj_model.site("imu").id
 
     # Contact sensor ids.
@@ -71,15 +73,6 @@ class Go1Env(mjx_env.MjxEnv):
         self._mj_model.sensor(f"{geom}_floor_found").id
         for geom in consts.FEET_GEOMS
     ]
-
-  def _get_assets(self) -> Dict[str, bytes]:
-    return get_assets()
-
-  def _configure_model(self) -> None:
-    """Applies the position actuator and joint damping configuration."""
-    self._mj_model.dof_damping[6:] = self._config.Kd
-    self._mj_model.actuator_gainprm[:, 0] = self._config.Kp
-    self._mj_model.actuator_biasprm[:, 1] = -self._config.Kp
 
   # Sensor readings.
 
@@ -118,26 +111,11 @@ class Go1Env(mjx_env.MjxEnv):
         for sensor_name in consts.FEET_POS_SENSOR
     ])
 
-  def _get_control(
-      self, position_target: jax.Array, action: jax.Array
-  ) -> jax.Array:
-    """Returns the position target used by the position actuators."""
-    del action
-    return position_target
-
-  def _get_reset_control(self, position_target: jax.Array) -> jax.Array:
-    """Returns the initial position target used during reset."""
-    return position_target
-
   # Accessors.
 
   @property
   def xml_path(self) -> str:
     return self._xml_path
-
-  @property
-  def episode_length(self) -> int:
-    return self._config.episode_length
 
   @property
   def action_size(self) -> int:
@@ -150,7 +128,3 @@ class Go1Env(mjx_env.MjxEnv):
   @property
   def mjx_model(self) -> mjx.Model:
     return self._mjx_model
-
-  @property
-  def n_substeps(self) -> int:
-    return max(1, int(round(self.dt / self.sim_dt)))

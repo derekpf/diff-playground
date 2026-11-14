@@ -176,7 +176,7 @@ class Handstand(go1_base.Go1Env):
         self.mj_model,
         qpos=qpos,
         qvel=qvel,
-        ctrl=self._get_reset_control(qpos[7:]),
+        ctrl=qpos[7:],
         impl=self.mjx_model.impl.value,
         naconmax=self._config.naconmax,
         njmax=self._config.njmax,
@@ -198,9 +198,8 @@ class Handstand(go1_base.Go1Env):
 
   def step(self, state: mjx_env.State, action: jax.Array) -> mjx_env.State:
     motor_targets = state.data.ctrl + action * self._config.action_scale
-    control = self._get_control(motor_targets, action)
     data = mjx_env.step(
-        self.mjx_model, state.data, control, self.n_substeps
+        self.mjx_model, state.data, motor_targets, self.n_substeps
     )
 
     obs = self._get_obs(data, state.info)
