@@ -141,7 +141,12 @@ class ContactSurrogateTest(absltest.TestCase):
           result = self.env.step(state.replace(data=data), jp.zeros(12))
           return result.metrics["reward/feet_height"]
 
-        for softness in (.005, .05, .5):
+        cfg = self.env._config.reward_config
+        # The swing peak uses the gated (SiLU-style) soft max, whose derivative
+        # w.r.t. the lower input is w + g * w * (1 - w), w = sigmoid(g), with
+        # g = (height - peak) / softness. It points toward the target only while
+        # g > -1.278..., so every width here keeps the 1 cm gap inside that.
+        for softness in (.01, .05, .5):
           self.env.reward_softness = softness
           for st in (False, True):
             self.env.reward_st_enable = st
@@ -151,9 +156,16 @@ class ContactSurrogateTest(absltest.TestCase):
               # toward the target for both ST modes and several widths.
               self.assertTrue(np.all(np.isfinite(gradient)))
               self.assertTrue(np.all(direction * gradient > 0.))
-              if st and softness == .05:
+              if st:
+                # ST keeps the hard forward peak, so the reward slope is exact.
+                g = (height - peak) / softness
+                w = 1. / (1. + np.exp(-g))
+                d_peak = w + g * w * (1. - w)
+                d_reward = (cfg.scales.feet_height * 2.
+                            * (peak / cfg.max_foot_height - 1.)
+                            / cfg.max_foot_height)
                 np.testing.assert_allclose(
-                    gradient, jp.full(4, direction * .1800664), rtol=1e-5)
+                    gradient, jp.full(4, d_reward * d_peak), rtol=1e-5)
     finally:
       self.env.reward_softness, self.env.reward_st_enable = previous
 

@@ -43,16 +43,14 @@ the peak, `standardize=False` alone gave gradient `0.401`; also disabling
 max contract gives a separate reason: over 201 ST-mode candidate gaps from
 `-0.10` to `+0.10` m at softness `0.05`, `gated_grad=True` produced gradient
 components outside `[0, 1]` at 74 points (range `[-0.0908, 1.0908]`), while
-`False` stayed in `[0.1192, 0.8808]`; both sums were one. Since increasing either
-candidate must not reduce a maximum, Go1 uses `False` for its swing-peak
-backward. The gradient choice has the same monotonicity in both ST modes. This
-local check does not determine the best gradient width or establish that the
-resulting touchdown reward gradient is useful.
+`False` stayed in `[0.1192, 0.8808]`; both sums were one. The gradient choice
+has the same monotonicity in both ST modes. This local check does not
+determine the best gradient width or establish that the resulting touchdown
+reward gradient is useful.
 
 Running peaks, progress floors, height caps, and instantaneous reward extrema
-use convex max/min selection weights so each candidate has a nonnegative local
-derivative. Their downstream reward derivatives still need separate checks:
-the local max/min condition does not establish a useful policy gradient.
+need their downstream reward derivatives checked separately: a local max/min
+gradient does not establish a useful policy gradient.
 Contact event comparisons and arithmetic resets pass gradients through the
 sensor gap, event gate, flight history, and touchdown reward. Their relevant
 metric is the Jacobian of that complete chain over nearby timesteps, including
