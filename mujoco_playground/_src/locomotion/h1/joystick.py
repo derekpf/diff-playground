@@ -161,16 +161,13 @@ class Joystick(h1_base.H1Env):
     )
 
     obs = self._get_obs(data, state.info, state.obs, noise_rng)
-    joint_angles = data.qpos[7:]
     joint_vel = data.qvel[6:]
-    torso_z = data.xpos[self._torso_body_id, -1]
 
-    done = self._get_gravity(data)[-1] < 0
-    done |= jp.any(joint_angles < self._lowers)
-    done |= jp.any(joint_angles > self._uppers)
-    done |= torso_z < 0.92
+    done, soft_done = self._get_termination(data)
 
-    rewards = self._get_reward(data, action, state.info, state.metrics, done)
+    rewards = self._get_reward(
+        data, action, state.info, state.metrics, soft_done
+    )
     rewards = {
         k: v * self._config.reward_config.scales[k] for k, v in rewards.items()
     }
@@ -248,6 +245,31 @@ class Joystick(h1_base.H1Env):
     sensor_adr = self._mj_model.sensor_adr[sensor_id]
     sensor_dim = self._mj_model.sensor_dim[sensor_id]
     return data.sensordata[sensor_adr : sensor_adr + sensor_dim]
+
+  def _get_termination(
+      self, data: mjx.Data
+  ) -> tuple[jax.Array, jax.Array]:
+    joint_angles = data.qpos[7:]
+    torso_z = data.xpos[self._torso_body_id, -1]
+    gravity_z = self._get_gravity(data)[-1]
+
+    done = gravity_z < 0
+    done |= jp.any(joint_angles < self._lowers)
+    done |= jp.any(joint_angles > self._uppers)
+    done |= torso_z < 0.92
+
+    kw = dict(softness=self.reward_softness, st_enable=self.reward_st_enable)
+    soft_done = sj.logical_or(
+        sj.logical_or(
+            sj.less(gravity_z, 0.0, **kw),
+            sj.any(sj.less(joint_angles, self._lowers, **kw), axis=0),
+        ),
+        sj.logical_or(
+            sj.any(sj.greater(joint_angles, self._uppers, **kw), axis=0),
+            sj.less(torso_z, 0.92, **kw),
+        ),
+    )
+    return done, soft_done
 
   # Reward functions.
 

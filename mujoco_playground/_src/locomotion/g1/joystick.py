@@ -398,14 +398,14 @@ class Joystick(g1_base.G1Env):
     )
 
     obs = self._get_obs(data, state.info, contact)
-    done = self._get_termination(data)
+    done, soft_done = self._get_termination(data)
 
     rewards = self._get_reward(
         data,
         action,
         state.info,
         state.metrics,
-        done,
+        soft_done,
         first_contact_reward,
         contact,
     )
@@ -449,23 +449,47 @@ class Joystick(g1_base.G1Env):
     state = state.replace(data=data, obs=obs, reward=reward, done=done)
     return state
 
-  def _get_termination(self, data: mjx.Data) -> jax.Array:
-    fall_termination = self.get_gravity(data, "torso")[-1] < 0.0
-    contact_termination = data.sensordata[
-        self._mj_model.sensor_adr[self._right_foot_left_foot_found_sensor]
-    ] > 0
-    contact_termination |= data.sensordata[
-        self._mj_model.sensor_adr[self._left_foot_right_shin_found_sensor]
-    ] > 0
-    contact_termination |= data.sensordata[
-        self._mj_model.sensor_adr[self._right_foot_left_shin_found_sensor]
-    ] > 0
-    return (
-        fall_termination
-        | contact_termination
-        | jp.isnan(data.qpos).any()
-        | jp.isnan(data.qvel).any()
+  def _get_termination(
+      self, data: mjx.Data
+  ) -> tuple[jax.Array, jax.Array]:
+    gravity_z = self.get_gravity(data, "torso")[-1]
+    fall_termination = gravity_z < 0.0
+    soft_fall_termination = sj.less(
+        gravity_z,
+        0.0,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
     )
+
+    contact_values = jp.array([
+        data.sensordata[
+            self._mj_model.sensor_adr[self._right_foot_left_foot_found_sensor]
+        ],
+        data.sensordata[
+            self._mj_model.sensor_adr[self._left_foot_right_shin_found_sensor]
+        ],
+        data.sensordata[
+            self._mj_model.sensor_adr[self._right_foot_left_shin_found_sensor]
+        ],
+    ])
+    contact_termination = jp.any(contact_values > 0.0)
+    soft_contact_termination = sj.any(
+        sj.greater(
+            contact_values,
+            0.0,
+            softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        ),
+        axis=0,
+    )
+
+    invalid_state = jp.isnan(data.qpos).any() | jp.isnan(data.qvel).any()
+    done = fall_termination | contact_termination | invalid_state
+    soft_done = sj.logical_or(
+        soft_fall_termination, soft_contact_termination
+    )
+    soft_done = jp.where(invalid_state, jp.ones_like(soft_done), soft_done)
+    return done, soft_done
 
   def _get_obs(
       self, data: mjx.Data, info: dict[str, Any], contact: jax.Array

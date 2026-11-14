@@ -228,10 +228,12 @@ class CubeReorient(leap_hand_base.LeapHandEnv):
     ]
     state.metrics["success_count"] = state.info["success_count"]
 
-    done = self._get_termination(data, state.info)
+    done, soft_done = self._get_termination(data, state.info)
     obs = self._get_obs(data, state.info)
 
-    rewards = self._get_reward(data, action, state.info, state.metrics, done)
+    rewards = self._get_reward(
+        data, action, state.info, state.metrics, soft_done
+    )
     rewards = {
         k: v * self._config.reward_config.scales[k] for k, v in rewards.items()
     }
@@ -270,11 +272,24 @@ class CubeReorient(leap_hand_base.LeapHandEnv):
     state = state.replace(data=data, obs=obs, reward=reward, done=done)
     return state
 
-  def _get_termination(self, data: mjx.Data, info: dict[str, Any]) -> jax.Array:
+  def _get_termination(
+      self, data: mjx.Data, info: dict[str, Any]
+  ) -> tuple[jax.Array, jax.Array]:
     del info  # Unused.
-    fall_termination = self.get_cube_position(data)[2] < -0.05
+    cube_z = self.get_cube_position(data)[2]
+    fall_termination = cube_z < -0.05
+    soft_fall_termination = sj.less(
+        cube_z,
+        -0.05,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
     nans = jp.any(jp.isnan(data.qpos)) | jp.any(jp.isnan(data.qvel))
-    return fall_termination | nans
+    done = fall_termination | nans
+    soft_done = jp.where(
+        nans, jp.ones_like(soft_fall_termination), soft_fall_termination
+    )
+    return done, soft_done
 
   def _get_obs(
       self, data: mjx.Data, info: dict[str, Any]
@@ -388,7 +403,7 @@ class CubeReorient(leap_hand_base.LeapHandEnv):
       action: jax.Array,
       info: dict[str, Any],
       metrics: dict[str, Any],
-      done: jax.Array,
+      soft_done: jax.Array,
   ) -> dict[str, jax.Array]:
     del metrics  # Unused.
 
@@ -411,7 +426,7 @@ class CubeReorient(leap_hand_base.LeapHandEnv):
     return {
         "orientation": self._reward_cube_orientation(data),
         "position": cube_pos_reward,
-        "termination": done,
+        "termination": soft_done,
         "hand_pose": hand_pose_reward,
         "action_rate": self._cost_action_rate(
             action, info["last_act"], info["last_last_act"]

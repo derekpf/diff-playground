@@ -213,8 +213,10 @@ class Joystick(base.ApolloEnv):
     )
 
     obs = self._get_obs(data, state.info)
-    done = self._get_termination(data, state.metrics)
-    rewards = self._get_reward(data, action, state.info, state.metrics, done)
+    done, soft_done = self._get_termination(data, state.metrics)
+    rewards = self._get_reward(
+        data, action, state.info, state.metrics, soft_done
+    )
     rewards = {
         k: v * self._config.reward_config.scales[k] for k, v in rewards.items()
     }
@@ -249,14 +251,26 @@ class Joystick(base.ApolloEnv):
 
   def _get_termination(
       self, data: mjx.Data, metrics: dict[str, Any]
-  ) -> jax.Array:
-    fall_termination = self.get_gravity(data)[-1] < 0.0
+  ) -> tuple[jax.Array, jax.Array]:
+    gravity_z = self.get_gravity(data)[-1]
+    fall_termination = gravity_z < 0.0
     metrics["termination/fall_termination"] = fall_termination.astype(
         jp.float32
     )
-    return (
-        fall_termination | jp.isnan(data.qpos).any() | jp.isnan(data.qvel).any()
+    soft_fall_termination = sj.less(
+        gravity_z,
+        0.0,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
     )
+
+    invalid_state = jp.isnan(data.qpos).any() | jp.isnan(data.qvel).any()
+    done = fall_termination | invalid_state
+    soft_done = jp.where(
+        invalid_state, jp.ones_like(soft_fall_termination),
+        soft_fall_termination,
+    )
+    return done, soft_done
 
   def _apply_noise(
       self, info: dict[str, Any], value: jax.Array, scale: float

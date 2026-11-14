@@ -192,11 +192,7 @@ class Handstand(go1_base.Go1Env):
     for k in self._config.reward_config.scales.keys():
       metrics[f"reward/{k}"] = jp.zeros(())
 
-    contact = jp.array([
-        data.sensordata[self._mj_model.sensor_adr[sensorid]] > 0
-        for sensorid in self._fullcollision_floor_found_sensor
-    ])
-    obs = self._get_obs(data, info, contact)
+    obs = self._get_obs(data, info)
     reward, done = jp.zeros(2)
     return mjx_env.State(data, obs, reward, done, metrics, info)
 
@@ -207,14 +203,10 @@ class Handstand(go1_base.Go1Env):
         self.mjx_model, state.data, control, self.n_substeps
     )
 
-    contact = jp.array([
-        data.sensordata[self._mj_model.sensor_adr[sensorid]] > 0
-        for sensorid in self._fullcollision_floor_found_sensor
-    ])
-    obs = self._get_obs(data, state.info, contact)
-    done = self._get_termination(data, state.info, contact)
+    obs = self._get_obs(data, state.info)
+    done, soft_done = self._get_termination(data)
 
-    rewards = self._get_reward(data, action, state.info, done)
+    rewards = self._get_reward(data, action, state.info, soft_done)
     rewards = {
         k: v * self._config.reward_config.scales[k] for k, v in rewards.items()
     }
@@ -236,20 +228,70 @@ class Handstand(go1_base.Go1Env):
     return state
 
   def _get_termination(
-      self, data: mjx.Data, info: dict[str, Any], contact: jax.Array
-  ) -> jax.Array:
-    del info  # Unused.
-    fall_termination = self.get_upvector(data)[-1] < -0.25
-    contact_termination = jp.any(contact)
+      self, data: mjx.Data
+  ) -> tuple[jax.Array, jax.Array]:
+    upvector_z = self.get_upvector(data)[-1]
+    fall_termination = upvector_z < -0.25
+    soft_fall_termination = sj.less(
+        upvector_z,
+        -0.25,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
+
+    contact_values = jp.array([
+        data.sensordata[self._mj_model.sensor_adr[sensorid]]
+        for sensorid in self._fullcollision_floor_found_sensor
+    ])
+    contact_termination = jp.any(contact_values > 0.0)
+    soft_contact_termination = sj.any(
+        sj.greater(
+            contact_values,
+            0.0,
+            softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        ),
+        axis=0,
+    )
+
     energy = jp.sum(jp.abs(data.actuator_force) * jp.abs(data.qvel[6:]))
     energy_termination = energy > self._config.energy_termination_threshold
-    return fall_termination | contact_termination | energy_termination
+    soft_energy = jp.sum(
+        sj.abs(
+            data.actuator_force,
+            softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        )
+        * sj.abs(
+            data.qvel[6:],
+            softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        )
+    )
+    soft_energy_termination = sj.greater(
+        soft_energy,
+        self._config.energy_termination_threshold,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
+
+    invalid_state = jp.isnan(data.qpos).any() | jp.isnan(data.qvel).any()
+    done = (
+        fall_termination
+        | contact_termination
+        | energy_termination
+        | invalid_state
+    )
+    soft_done = sj.logical_or(
+        sj.logical_or(soft_fall_termination, soft_contact_termination),
+        soft_energy_termination,
+    )
+    soft_done = jp.where(invalid_state, jp.ones_like(soft_done), soft_done)
+    return done, soft_done
 
   def _get_obs(
-      self, data: mjx.Data, info: dict[str, Any], contact: jax.Array
+      self, data: mjx.Data, info: dict[str, Any]
   ) -> Dict[str, jax.Array]:
-    del contact  # Unused.
-
     gyro = self.get_gyro(data)
     info["rng"], noise_rng = jax.random.split(info["rng"])
     noisy_gyro = (

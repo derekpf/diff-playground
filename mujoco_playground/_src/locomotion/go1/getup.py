@@ -204,9 +204,11 @@ class Getup(go1_base.Go1Env):
     )
 
     obs = self._get_obs(data, state.info)
-    done = self._get_termination(data)
+    done, soft_done = self._get_termination(data)
 
-    rewards = self._get_reward(data, action, state.info, state.metrics, done)
+    rewards = self._get_reward(
+        data, action, state.info, state.metrics, soft_done
+    )
     rewards = {
         k: v * self._config.reward_config.scales[k] for k, v in rewards.items()
     }
@@ -224,14 +226,29 @@ class Getup(go1_base.Go1Env):
     for k, v in rewards.items():
       state.metrics[f"reward/{k}"] = v
 
-    done = jp.float32(done)
+    done = done.astype(reward.dtype)
     state = state.replace(data=data, obs=obs, reward=reward, done=done)
     return state
 
-  def _get_termination(self, data: mjx.Data) -> jax.Array:
+  def _get_termination(
+      self, data: mjx.Data
+  ) -> tuple[jax.Array, jax.Array]:
     energy = jp.sum(jp.abs(data.actuator_force * data.qvel[6:]))
     energy_termination = energy > self._config.energy_termination_threshold
-    return energy_termination
+    soft_energy = jp.sum(
+        sj.abs(
+            data.actuator_force * data.qvel[6:],
+            softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        )
+    )
+    soft_energy_termination = sj.greater(
+        soft_energy,
+        self._config.energy_termination_threshold,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
+    return energy_termination, soft_energy_termination
 
   def _get_obs(
       self, data: mjx.Data, info: dict[str, Any]

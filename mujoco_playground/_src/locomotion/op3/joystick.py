@@ -199,9 +199,11 @@ class Joystick(op3_base.Op3Env):
     )
 
     obs = self._get_obs(data, state.info, state.obs, noise_rng)
-    done = self._get_termination(data)
+    done, soft_done = self._get_termination(data)
 
-    rewards = self._get_reward(data, action, state.info, state.metrics, done)
+    rewards = self._get_reward(
+        data, action, state.info, state.metrics, soft_done
+    )
     rewards = {
         k: v * self._config.reward_config.scales[k] for k, v in rewards.items()
     }
@@ -238,23 +240,41 @@ class Joystick(op3_base.Op3Env):
     state = state.replace(data=data, obs=obs, reward=reward, done=done)
     return state
 
-  def _get_termination(self, data: mjx.Data) -> jax.Array:
+  def _get_termination(
+      self, data: mjx.Data
+  ) -> tuple[jax.Array, jax.Array]:
     joint_angles = data.qpos[7:]
     torso_z = data.xpos[self._torso_body_id, -1]
+    gravity_z = self.get_gravity(data)[-1]
 
     # Joint limits exceeded.
     joint_limit_exceed = jp.any(joint_angles < self._lowers)
     joint_limit_exceed |= jp.any(joint_angles > self._uppers)
 
     # Fall detection.
-    fall_termination = self.get_gravity(data)[-1] < 0.85
+    fall_termination = gravity_z < 0.85
     fall_termination |= torso_z < 0.21
 
-    return jp.where(
+    done = jp.where(
         self._config.early_termination,
         joint_limit_exceed | fall_termination,
         joint_limit_exceed,
     )
+
+    kw = dict(softness=self.reward_softness, st_enable=self.reward_st_enable)
+    soft_joint_limit_exceed = sj.logical_or(
+        sj.any(sj.less(joint_angles, self._lowers, **kw), axis=0),
+        sj.any(sj.greater(joint_angles, self._uppers, **kw), axis=0),
+    )
+    soft_fall_termination = sj.logical_or(
+        sj.less(gravity_z, 0.85, **kw), sj.less(torso_z, 0.21, **kw)
+    )
+    soft_done = jp.where(
+        self._config.early_termination,
+        sj.logical_or(soft_joint_limit_exceed, soft_fall_termination),
+        soft_joint_limit_exceed,
+    )
+    return done, soft_done
 
   def _get_obs(
       self,

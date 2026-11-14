@@ -387,14 +387,14 @@ class Joystick(t1_base.T1Env):
     )
 
     obs = self._get_obs(data, state.info, contact)
-    done = self._get_termination(data)
+    done, soft_done = self._get_termination(data)
 
     rewards = self._get_reward(
         data,
         action,
         state.info,
         state.metrics,
-        done,
+        soft_done,
         first_contact_reward,
         contact_reward,
     )
@@ -443,11 +443,25 @@ class Joystick(t1_base.T1Env):
     state = state.replace(data=data, obs=obs, reward=reward, done=done)
     return state
 
-  def _get_termination(self, data: mjx.Data) -> jax.Array:
-    fall_termination = self.get_gravity(data)[-1] < 0.0
-    return (
-        fall_termination | jp.isnan(data.qpos).any() | jp.isnan(data.qvel).any()
+  def _get_termination(
+      self, data: mjx.Data
+  ) -> tuple[jax.Array, jax.Array]:
+    gravity_z = self.get_gravity(data)[-1]
+    fall_termination = gravity_z < 0.0
+    soft_fall_termination = sj.less(
+        gravity_z,
+        0.0,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
     )
+
+    invalid_state = jp.isnan(data.qpos).any() | jp.isnan(data.qvel).any()
+    done = fall_termination | invalid_state
+    soft_done = jp.where(
+        invalid_state, jp.ones_like(soft_fall_termination),
+        soft_fall_termination,
+    )
+    return done, soft_done
 
   def _get_obs(
       self, data: mjx.Data, info: dict[str, Any], contact: jax.Array
