@@ -265,10 +265,16 @@ class Joystick(berkeley_humanoid_base.BerkeleyHumanoidEnv):
       metrics[f"reward/{k}"] = jp.zeros(())
     metrics["swing_peak"] = jp.zeros(())
 
-    contact = jp.array([
-        data.sensordata[self._mj_model.sensor_adr[sensor_id]] > 0
+    contact_values = jp.array([
+        data.sensordata[self._mj_model.sensor_adr[sensor_id]]
         for sensor_id in self._feet_floor_found_sensor
     ])
+    contact = sj.greater(
+        contact_values,
+        0.0,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
 
     obs = self._get_obs(data, info, contact)
     reward, done = jp.zeros(2)
