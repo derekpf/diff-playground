@@ -22,8 +22,8 @@ from ml_collections import config_dict
 from mujoco import mjx
 from mujoco.mjx._src import math
 import numpy as np
-
 from mujoco_playground._src import mjx_env
+from mujoco_playground._src import softjax as sj
 from mujoco_playground._src.locomotion.go1 import base as go1_base
 from mujoco_playground._src.locomotion.go1 import go1_constants as consts
 
@@ -66,7 +66,7 @@ def default_config() -> config_dict.ConfigDict:
               dof_acc=0.0,
           ),
       ),
-      impl="warp",
+      impl="jax",
       naconmax=30 * 8192,
       njmax=200,
   )
@@ -192,11 +192,7 @@ class Handstand(go1_base.Go1Env):
     for k in self._config.reward_config.scales.keys():
       metrics[f"reward/{k}"] = jp.zeros(())
 
-    contact = jp.array([
-        data.sensordata[self._mj_model.sensor_adr[sensorid]] > 0
-        for sensorid in self._fullcollision_floor_found_sensor
-    ])
-    obs = self._get_obs(data, info, contact)
+    obs = self._get_obs(data, info)
     reward, done = jp.zeros(2)
     return mjx_env.State(data, obs, reward, done, metrics, info)
 
@@ -206,18 +202,21 @@ class Handstand(go1_base.Go1Env):
         self.mjx_model, state.data, motor_targets, self.n_substeps
     )
 
-    contact = jp.array([
-        data.sensordata[self._mj_model.sensor_adr[sensorid]] > 0
-        for sensorid in self._fullcollision_floor_found_sensor
-    ])
-    obs = self._get_obs(data, state.info, contact)
-    done = self._get_termination(data, state.info, contact)
+    obs = self._get_obs(data, state.info)
+    done, soft_done = self._get_termination(data)
 
-    rewards = self._get_reward(data, action, state.info, done)
+    rewards = self._get_reward(data, action, state.info, soft_done)
     rewards = {
         k: v * self._config.reward_config.scales[k] for k, v in rewards.items()
     }
-    reward = jp.clip(sum(rewards.values()) * self.dt, 0.0, 10000.0)
+    reward = sj.clip(
+        sum(rewards.values()) * self.dt,
+        0.0,
+        10000.0,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+        gated=False,
+    )
 
     state.info["step"] += 1
     state.info["last_act"] = action
@@ -229,20 +228,70 @@ class Handstand(go1_base.Go1Env):
     return state
 
   def _get_termination(
-      self, data: mjx.Data, info: dict[str, Any], contact: jax.Array
-  ) -> jax.Array:
-    del info  # Unused.
-    fall_termination = self.get_upvector(data)[-1] < -0.25
-    contact_termination = jp.any(contact)
+      self, data: mjx.Data
+  ) -> tuple[jax.Array, jax.Array]:
+    upvector_z = self.get_upvector(data)[-1]
+    fall_termination = upvector_z < -0.25
+    soft_fall_termination = sj.less(
+        upvector_z,
+        -0.25,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
+
+    contact_values = jp.array([
+        data.sensordata[self._mj_model.sensor_adr[sensorid]]
+        for sensorid in self._fullcollision_floor_found_sensor
+    ])
+    contact_termination = jp.any(contact_values > 0.0)
+    soft_contact_termination = sj.any(
+        sj.greater(
+            contact_values,
+            0.0,
+            softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        ),
+        axis=0,
+    )
+
     energy = jp.sum(jp.abs(data.actuator_force) * jp.abs(data.qvel[6:]))
     energy_termination = energy > self._config.energy_termination_threshold
-    return fall_termination | contact_termination | energy_termination
+    soft_energy = jp.sum(
+        sj.abs(
+            data.actuator_force,
+            softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        )
+        * sj.abs(
+            data.qvel[6:],
+            softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        )
+    )
+    soft_energy_termination = sj.greater(
+        soft_energy,
+        self._config.energy_termination_threshold,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
+
+    invalid_state = jp.isnan(data.qpos).any() | jp.isnan(data.qvel).any()
+    done = (
+        fall_termination
+        | contact_termination
+        | energy_termination
+        | invalid_state
+    )
+    soft_done = sj.logical_or(
+        sj.logical_or(soft_fall_termination, soft_contact_termination),
+        soft_energy_termination,
+    )
+    soft_done = jp.where(invalid_state, jp.ones_like(soft_done), soft_done)
+    return done, soft_done
 
   def _get_obs(
-      self, data: mjx.Data, info: dict[str, Any], contact: jax.Array
+      self, data: mjx.Data, info: dict[str, Any]
   ) -> Dict[str, jax.Array]:
-    del contact  # Unused.
-
     gyro = self.get_gyro(data)
     info["rng"], noise_rng = jax.random.split(info["rng"])
     noisy_gyro = (
@@ -356,16 +405,33 @@ class Handstand(go1_base.Go1Env):
     return jp.square(normalized)
 
   def _reward_height(self, torso_height: jax.Array) -> jax.Array:
-    height = jp.min(jp.array([torso_height, self._z_des]))
+    height = sj.min(
+        jp.array([torso_height, self._z_des]),
+        softness=self.reward_softness,
+        standardize=False,
+        gated_grad=True,
+        st_enable=self.reward_st_enable,
+    )
     error = self._z_des - height
-    return jp.exp(-error / 1.0)
+    return jp.exp(-sj.div(error, 1.0))
 
   def _cost_contact(self, data: mjx.Data) -> jax.Array:
+    # Only the feet that should leave the floor (self._feet_geom_ids); the base
+    # class's _feet_floor_found_sensor covers all four feet.
     feet_contact = jp.array([
-        data.sensordata[self._mj_model.sensor_adr[sensorid]] > 0
+        data.sensordata[self._mj_model.sensor_adr[sensorid]]
         for sensorid in self._feet_floor_found_sensor
+        if self._mj_model.sensor_objid[sensorid] in self._feet_geom_ids
     ])
-    return jp.any(feet_contact)
+    return sj.any(
+        sj.greater(
+            feet_contact,
+            0.0,
+            softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        ),
+        axis=-1,
+    )
 
   def _cost_pose(self, qpos: jax.Array) -> jax.Array:
     return jp.sum(jp.square(qpos[self._joint_ids] - self._joint_pose))
@@ -376,7 +442,16 @@ class Handstand(go1_base.Go1Env):
   def _cost_energy(
       self, qvel: jax.Array, qfrc_actuator: jax.Array
   ) -> jax.Array:
-    return jp.sum(jp.abs(qvel) * jp.abs(qfrc_actuator))
+    return jp.sum(
+        sj.abs(
+            qvel, softness=self.reward_softness, st_enable=self.reward_st_enable
+        )
+        * sj.abs(
+            qfrc_actuator,
+            softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        )
+    )
 
   def _cost_action_rate(
       self, act: jax.Array, info: dict[str, Any]
@@ -384,8 +459,22 @@ class Handstand(go1_base.Go1Env):
     return jp.sum(jp.square(act - info["last_act"]))
 
   def _cost_joint_pos_limits(self, qpos: jax.Array) -> jax.Array:
-    out_of_limits = -jp.clip(qpos - self._soft_lowers, None, 0.0)
-    out_of_limits += jp.clip(qpos - self._soft_uppers, 0.0, None)
+    out_of_limits = -sj.clip(
+        qpos - self._soft_lowers,
+        None,
+        0.0,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+        gated=False,
+    )
+    out_of_limits += sj.clip(
+        qpos - self._soft_uppers,
+        0.0,
+        None,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+        gated=False,
+    )
     return jp.sum(out_of_limits)
 
   def _cost_dof_acc(self, qacc: jax.Array) -> jax.Array:
@@ -424,6 +513,12 @@ class Footstand(Handstand):
     self._unwanted_contact_geom_ids = np.array(
         [self._mj_model.geom(name).id for name in geom_names]
     )
+    # Termination watches the rear legs, which carry the weight here; the
+    # parent's list covers the front legs.
+    self._fullcollision_floor_found_sensor = [
+        self._mj_model.sensor(f"{geom}_floor_found").id
+        for geom in geom_names
+    ]
 
     feet_geom_names = ["FR", "FL"]
     self._feet_geom_ids = np.array(

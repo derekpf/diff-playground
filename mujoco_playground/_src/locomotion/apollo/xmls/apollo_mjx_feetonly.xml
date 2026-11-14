@@ -1,7 +1,7 @@
 <mujoco model="apptronik_apollo">
   <compiler angle="radian" eulerseq="zyx" texturedir="assets" autolimits="true"/>
 
-  <option iterations="3" ls_iterations="5" timestep=".005" integrator="implicitfast">
+  <option iterations="10" ls_iterations="5" timestep=".005" integrator="implicitfast">
     <flag eulerdamp="disable"/>
   </option>
 

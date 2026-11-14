@@ -21,9 +21,9 @@ import jax.numpy as jp
 from ml_collections import config_dict
 import mujoco
 from mujoco import mjx
-
 from mujoco_playground._src import mjx_env
 from mujoco_playground._src import reward
+from mujoco_playground._src import softjax as sj
 from mujoco_playground._src.dm_control_suite import common
 
 _XML_PATH = mjx_env.ROOT_PATH / "dm_control_suite" / "xmls" / "cheetah.xml"
@@ -38,7 +38,7 @@ def default_config() -> config_dict.ConfigDict:
       episode_length=1000,
       action_repeat=1,
       vision=False,
-      impl="warp",
+      impl="jax",
       naconmax=100_000,
       njmax=100,
   )
@@ -136,6 +136,8 @@ class Run(mjx_env.MjxEnv):
         margin=_RUN_SPEED,
         value_at_margin=0,
         sigmoid="linear",
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
     )
 
   @property

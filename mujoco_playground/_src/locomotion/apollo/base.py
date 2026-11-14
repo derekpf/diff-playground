@@ -169,14 +169,14 @@ class ApolloEnv(mjx_env.MjxEnv):
     """Return an array indicating whether each foot is in contact with the ground."""
     left_feet_contact = jp.array([
         data.sensordata[
-            self._mj_model.sensor_adr[self._mj_model.sensor_adr[sensorid]]
+            self._mj_model.sensor_adr[sensorid]
         ]
         > 0
         for sensorid in self._left_feet_floor_found_sensor
     ])
     right_feet_contact = jp.array([
         data.sensordata[
-            self._mj_model.sensor_adr[self._mj_model.sensor_adr[sensorid]]
+            self._mj_model.sensor_adr[sensorid]
         ]
         > 0
         for sensorid in self._right_feet_floor_found_sensor

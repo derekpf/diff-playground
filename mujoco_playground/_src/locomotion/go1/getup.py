@@ -21,8 +21,8 @@ import jax.numpy as jp
 from ml_collections import config_dict
 from mujoco import mjx
 import numpy as np
-
 from mujoco_playground._src import mjx_env
+from mujoco_playground._src import softjax as sj
 from mujoco_playground._src.locomotion.go1 import base as go1_base
 from mujoco_playground._src.locomotion.go1 import go1_constants as consts
 
@@ -62,7 +62,7 @@ def default_config() -> config_dict.ConfigDict:
               dof_vel=-0.1,
           ),
       ),
-      impl="warp",
+      impl="jax",
       naconmax=30 * 8192,
       njmax=250,
   )
@@ -203,13 +203,22 @@ class Getup(go1_base.Go1Env):
     )
 
     obs = self._get_obs(data, state.info)
-    done = self._get_termination(data)
+    done, soft_done = self._get_termination(data)
 
-    rewards = self._get_reward(data, action, state.info, state.metrics, done)
+    rewards = self._get_reward(
+        data, action, state.info, state.metrics, soft_done
+    )
     rewards = {
         k: v * self._config.reward_config.scales[k] for k, v in rewards.items()
     }
-    reward = jp.clip(sum(rewards.values()) * self.dt, 0.0, 10000.0)
+    reward = sj.clip(
+        sum(rewards.values()) * self.dt,
+        0.0,
+        10000.0,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+        gated=False,
+    )
 
     # Bookkeeping.
     state.info["last_last_act"] = state.info["last_act"]
@@ -217,14 +226,29 @@ class Getup(go1_base.Go1Env):
     for k, v in rewards.items():
       state.metrics[f"reward/{k}"] = v
 
-    done = jp.float32(done)
+    done = done.astype(reward.dtype)
     state = state.replace(data=data, obs=obs, reward=reward, done=done)
     return state
 
-  def _get_termination(self, data: mjx.Data) -> jax.Array:
+  def _get_termination(
+      self, data: mjx.Data
+  ) -> tuple[jax.Array, jax.Array]:
     energy = jp.sum(jp.abs(data.actuator_force * data.qvel[6:]))
     energy_termination = energy > self._config.energy_termination_threshold
-    return energy_termination
+    soft_energy = jp.sum(
+        sj.abs(
+            data.actuator_force * data.qvel[6:],
+            softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        )
+    )
+    soft_energy_termination = sj.greater(
+        soft_energy,
+        self._config.energy_termination_threshold,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
+    return energy_termination, soft_energy_termination
 
   def _get_obs(
       self, data: mjx.Data, info: dict[str, Any]
@@ -328,21 +352,43 @@ class Getup(go1_base.Go1Env):
 
   def _is_upright(self, gravity: jax.Array, ori_tol: float = 0.01) -> jax.Array:
     ori_error = jp.sum(jp.square(self._up_vec - gravity))
-    return ori_error < ori_tol
+    return sj.less(
+        ori_error,
+        ori_tol,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
 
   def _is_at_desired_height(
       self, torso_height: jax.Array, pos_tol: float = 0.005
   ) -> jax.Array:
-    height = jp.min(jp.array([torso_height, self._z_des]))
+    height = sj.min(
+        jp.array([torso_height, self._z_des]),
+        softness=self.reward_softness,
+        standardize=False,
+        gated_grad=True,
+        st_enable=self.reward_st_enable,
+    )
     height_error = self._z_des - height
-    return height_error < pos_tol
+    return sj.less(
+        height_error,
+        pos_tol,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
 
   def _reward_orientation(self, up_vec: jax.Array) -> jax.Array:
     error = jp.sum(jp.square(self._up_vec - up_vec))
     return jp.exp(-2.0 * error)
 
   def _reward_height(self, torso_height: jax.Array) -> jax.Array:
-    height = jp.min(jp.array([torso_height, self._z_des]))
+    height = sj.min(
+        jp.array([torso_height, self._z_des]),
+        softness=self.reward_softness,
+        standardize=False,
+        gated_grad=True,
+        st_enable=self.reward_st_enable,
+    )
     return jp.exp(height) - 1.0
 
   def _reward_posture(
@@ -358,7 +404,13 @@ class Getup(go1_base.Go1Env):
     return gate * rew
 
   def _cost_torques(self, torques: jax.Array) -> jax.Array:
-    return jp.sqrt(jp.sum(jp.square(torques))) + jp.sum(jp.abs(torques))
+    return sj.norm(torques) + jp.sum(
+        sj.abs(
+            torques,
+            softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        )
+    )
 
   def _cost_action_rate(
       self, act: jax.Array, info: dict[str, Any]
@@ -368,13 +420,35 @@ class Getup(go1_base.Go1Env):
     return c1 + c2
 
   def _cost_joint_pos_limits(self, qpos: jax.Array) -> jax.Array:
-    out_of_limits = -jp.clip(qpos - self._soft_lowers, None, 0.0)
-    out_of_limits += jp.clip(qpos - self._soft_uppers, 0.0, None)
+    out_of_limits = -sj.clip(
+        qpos - self._soft_lowers,
+        None,
+        0.0,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+        gated=False,
+    )
+    out_of_limits += sj.clip(
+        qpos - self._soft_uppers,
+        0.0,
+        None,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+        gated=False,
+    )
     return jp.sum(out_of_limits)
 
   def _cost_dof_vel(self, qvel: jax.Array) -> jax.Array:
     max_velocity = 2.0 * jp.pi  # rad/s
-    cost = jp.maximum(jp.abs(qvel) - max_velocity, 0.0)
+    cost = sj.relu(
+        sj.abs(
+            qvel, softness=self.reward_softness, st_enable=self.reward_st_enable
+        )
+        - max_velocity,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+        gated=False,
+    )
     return jp.sum(jp.square(cost))
 
   def _cost_dof_acc(self, qacc: jax.Array) -> jax.Array:

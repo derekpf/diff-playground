@@ -177,11 +177,12 @@ def main(argv):
   raw_env = registry.load(
       _ENV_NAME.value, config=env_cfg, config_overrides=env_cfg_overrides
   )
+  episode_length = raw_env.episode_length
   brax_env = wrapper_torch.RSLRLBraxWrapper(
       raw_env,
       num_envs,
       _SEED.value,
-      env_cfg.episode_length,
+      episode_length,
       1,
       render_callback=render_callback,
       randomization_fn=randomizer,
@@ -245,7 +246,7 @@ def main(argv):
   obs = state.obs["state"] if is_dict_obs else state.obs
   obs_torch = wrapper_torch._jax_to_torch(obs)
 
-  for _ in range(env_cfg.episode_length):
+  for _ in range(eval_env.episode_length):
     with torch.no_grad():
       actions = policy({"state": obs_torch})
       actions = torch.clip(actions, -1.0, 1.0)  # from wrapper_torch.py

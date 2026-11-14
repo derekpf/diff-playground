@@ -22,9 +22,9 @@ from ml_collections import config_dict
 from mujoco import mjx
 from mujoco.mjx._src import math
 import numpy as np
-
 from mujoco_playground._src import mjx_env
 from mujoco_playground._src import reward
+from mujoco_playground._src import softjax as sj
 from mujoco_playground._src.manipulation.leap_hand import base as leap_hand_base
 from mujoco_playground._src.manipulation.leap_hand import leap_hand_constants as consts
 
@@ -67,7 +67,7 @@ def default_config() -> config_dict.ConfigDict:
           pert_duration_steps=[1, 100],
           pert_wait_steps=[60, 150],
       ),
-      impl='warp',
+      impl='jax',
       naconmax=30 * 8192,
       njmax=160,
   )
@@ -228,10 +228,12 @@ class CubeReorient(leap_hand_base.LeapHandEnv):
     ]
     state.metrics["success_count"] = state.info["success_count"]
 
-    done = self._get_termination(data, state.info)
+    done, soft_done = self._get_termination(data, state.info)
     obs = self._get_obs(data, state.info)
 
-    rewards = self._get_reward(data, action, state.info, state.metrics, done)
+    rewards = self._get_reward(
+        data, action, state.info, state.metrics, soft_done
+    )
     rewards = {
         k: v * self._config.reward_config.scales[k] for k, v in rewards.items()
     }
@@ -251,7 +253,13 @@ class CubeReorient(leap_hand_base.LeapHandEnv):
     )
     data = data.replace(mocap_quat=jp.array([goal_quat]))
     state.metrics["reward/success"] = success.astype(float)
-    reward += success * self._config.reward_config.success_reward
+    success_reward = sj.less(
+        ori_error,
+        self._config.success_threshold,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
+    reward += success_reward * self._config.reward_config.success_reward
 
     # Update info and metrics.
     state.info["step"] += 1
@@ -264,11 +272,24 @@ class CubeReorient(leap_hand_base.LeapHandEnv):
     state = state.replace(data=data, obs=obs, reward=reward, done=done)
     return state
 
-  def _get_termination(self, data: mjx.Data, info: dict[str, Any]) -> jax.Array:
+  def _get_termination(
+      self, data: mjx.Data, info: dict[str, Any]
+  ) -> tuple[jax.Array, jax.Array]:
     del info  # Unused.
-    fall_termination = self.get_cube_position(data)[2] < -0.05
+    cube_z = self.get_cube_position(data)[2]
+    fall_termination = cube_z < -0.05
+    soft_fall_termination = sj.less(
+        cube_z,
+        -0.05,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
     nans = jp.any(jp.isnan(data.qpos)) | jp.any(jp.isnan(data.qvel))
-    return fall_termination | nans
+    done = fall_termination | nans
+    soft_done = jp.where(
+        nans, jp.ones_like(soft_fall_termination), soft_fall_termination
+    )
+    return done, soft_done
 
   def _get_obs(
       self, data: mjx.Data, info: dict[str, Any]
@@ -382,18 +403,21 @@ class CubeReorient(leap_hand_base.LeapHandEnv):
       action: jax.Array,
       info: dict[str, Any],
       metrics: dict[str, Any],
-      done: jax.Array,
+      soft_done: jax.Array,
   ) -> dict[str, jax.Array]:
-    del done, metrics  # Unused.
+    del metrics  # Unused.
 
     cube_pos = self.get_cube_position(data)
     palm_pos = self.get_palm_position(data)
-    cube_pose_mse = jp.linalg.norm(palm_pos - cube_pos)
+    cube_pose_mse = sj.norm(palm_pos - cube_pos)
     cube_pos_reward = reward.tolerance(
-        cube_pose_mse, (0, 0.02), margin=0.05, sigmoid="linear"
+        cube_pose_mse,
+        (0, 0.02),
+        margin=0.05,
+        sigmoid="linear",
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
     )
-
-    terminated = self._get_termination(data, info)
 
     hand_pose_reward = jp.sum(
         jp.square(data.qpos[self._hand_qids] - self._default_pose)
@@ -402,7 +426,7 @@ class CubeReorient(leap_hand_base.LeapHandEnv):
     return {
         "orientation": self._reward_cube_orientation(data),
         "position": cube_pos_reward,
-        "termination": terminated,
+        "termination": soft_done,
         "hand_pose": hand_pose_reward,
         "action_rate": self._cost_action_rate(
             action, info["last_act"], info["last_last_act"]
@@ -416,18 +440,43 @@ class CubeReorient(leap_hand_base.LeapHandEnv):
   def _cost_energy(
       self, qvel: jax.Array, qfrc_actuator: jax.Array
   ) -> jax.Array:
-    return jp.sum(jp.abs(qvel) * jp.abs(qfrc_actuator))
+    return jp.sum(
+        sj.abs(
+            qvel, softness=self.reward_softness, st_enable=self.reward_st_enable
+        )
+        * sj.abs(
+            qfrc_actuator,
+            softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        )
+    )
 
   def _cube_orientation_error(self, data: mjx.Data):
     cube_ori = self.get_cube_orientation(data)
     cube_goal_ori = self.get_cube_goal_orientation(data)
     quat_diff = math.quat_mul(cube_ori, math.quat_inv(cube_goal_ori))
-    quat_diff = math.normalize(quat_diff)
-    return 2.0 * jp.asin(jp.clip(math.norm(quat_diff[1:]), max=1.0))
+    quat_diff = sj.div(quat_diff, sj.norm(quat_diff))
+    return 2.0 * sj.arcsin(
+        sj.clip(
+            sj.norm(quat_diff[1:]),
+            0.0,
+            1.0,
+            softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+            gated=False,
+        )
+    )
 
   def _reward_cube_orientation(self, data: mjx.Data) -> jax.Array:
     ori_error = self._cube_orientation_error(data)
-    return reward.tolerance(ori_error, (0, 0.2), margin=jp.pi, sigmoid="linear")
+    return reward.tolerance(
+        ori_error,
+        (0, 0.2),
+        margin=jp.pi,
+        sigmoid="linear",
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
 
   def _cost_action_rate(
       self, act: jax.Array, last_act: jax.Array, last_last_act: jax.Array
@@ -440,7 +489,9 @@ class CubeReorient(leap_hand_base.LeapHandEnv):
     max_velocity = 5.0
     vel_tolerance = 1.0
     hand_qvel = data.qvel[self._hand_dqids]
-    return jp.sum((hand_qvel / (max_velocity - vel_tolerance)) ** 2)
+    return jp.sum(
+        jp.square(sj.div(hand_qvel, max_velocity - vel_tolerance))
+    )
 
   # Perturbation.
 

@@ -21,9 +21,9 @@ import jax.numpy as jp
 from ml_collections import config_dict
 from mujoco import mjx
 import numpy as np
-
 from mujoco_playground._src import gait
 from mujoco_playground._src import mjx_env
+from mujoco_playground._src import softjax as sj
 from mujoco_playground._src.locomotion.spot import base as spot_base
 from mujoco_playground._src.locomotion.spot import spot_constants as consts
 
@@ -76,7 +76,7 @@ def default_config() -> config_dict.ConfigDict:
       gait_frequency=[0.5, 4.0],
       gaits=["trot", "walk", "pace", "bound", "pronk"],
       foot_height=[0.08, 0.4],
-      impl="warp",
+      impl="jax",
       naconmax=4 * 8192,
       njmax=12 + 4 * 4,
   )
@@ -341,9 +341,14 @@ class JoystickGaitTracking(spot_base.SpotEnv):
     # Reward for tracking the desired foot height.
     foot_pos = data.site_xpos[self._feet_site_id]
     foot_z = foot_pos[..., -1]
-    rz = gait.get_rz(phase, swing_height=foot_height)
+    rz = gait.get_rz(
+        phase,
+        swing_height=foot_height,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
     error = jp.sum(jp.square(foot_z - rz))
-    return jp.exp(-error / 0.1)
+    return jp.exp(-sj.div(error, 0.1))
 
   def _reward_tracking_lin_vel(
       self,
@@ -352,7 +357,7 @@ class JoystickGaitTracking(spot_base.SpotEnv):
   ) -> jax.Array:
     # Tracking of linear velocity commands (xy axes).
     lin_vel_error = jp.sum(jp.square(commands[:2] - local_vel[:2]))
-    reward = jp.exp(-lin_vel_error / self._config.reward_config.tracking_sigma)
+    reward = jp.exp(-sj.div(lin_vel_error, self._config.reward_config.tracking_sigma))
     return reward
 
   def _reward_tracking_ang_vel(
@@ -362,7 +367,7 @@ class JoystickGaitTracking(spot_base.SpotEnv):
   ) -> jax.Array:
     # Tracking of angular velocity commands (yaw).
     ang_vel_error = jp.square(commands[2] - ang_vel[2])
-    return jp.exp(-ang_vel_error / self._config.reward_config.tracking_sigma)
+    return jp.exp(-sj.div(ang_vel_error, self._config.reward_config.tracking_sigma))
 
   def _cost_hip_splay(self, joint_angles: jax.Array) -> jax.Array:
     current = joint_angles[self._hx_idxs]
@@ -371,7 +376,12 @@ class JoystickGaitTracking(spot_base.SpotEnv):
   def _cost_lin_vel_z(self, global_linvel, gait: jax.Array) -> jax.Array:  # pylint: disable=redefined-outer-name
     # Penalize z axis base linear velocity unless pronk or bound.
     cost = jp.square(global_linvel[2])
-    return cost * (gait > 2)
+    return cost * sj.greater(
+        gait,
+        2,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
 
   def _cost_ang_vel_xy(self, global_angvel) -> jax.Array:
     # Penalize xy axes base angular velocity.

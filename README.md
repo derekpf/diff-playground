@@ -6,6 +6,95 @@
 
 A comprehensive suite of GPU-accelerated environments for robot learning research and sim-to-real, built with [MuJoCo MJX](https://github.com/google-deepmind/mujoco/tree/main/mjx).
 
+## Choosing SoftJAX surrogate flags
+
+Softness and ST settings belong to the user. Reward and event-history calls
+honor `reward_st_enable`; sensor and physics ST settings remain independent.
+Calibrate other optional flags against the backward quantity consumed by each
+call site, checking direction and monotonicity across user settings. With ST
+enabled, the forward must match the nominal operation. Composite gradients can
+still change with ST because downstream operations see different input values.
+
+- **Keep softness tied to physical units with `standardize=False`.** SoftJAX's
+  default standardization normalizes and squashes values before computing soft
+  selection weights, so `softness` no longer directly tracks a distance, height,
+  or force scale. Leave standardization enabled when scale-normalized selection
+  is intentional, and tune softness in that normalized domain.
+
+- **Choose the selection-gradient rule to match the max contract.** For
+  SoftJAX's selection-based `max`, `gated_grad=True` differentiates through the
+  soft index and gives the exact derivative of the relaxed weighted-value
+  output. `False` stops that path, leaving soft-index weights as the gradient.
+  Those weights form a convex combination of hard-max subgradients. Choose
+  `False` when that monotone max-like backward is the intended surrogate; choose
+  `True` when the desired gradient is the exact derivative of the relaxed
+  weighted-value output. Keep the choice fixed while comparing ST modes: ST
+  controls the forward value, not the selection-gradient rule.
+
+- **Check the complete backward path.** Probe ties, thresholds, and realistic
+  input gaps. Measure both the operator Jacobian and the reward or state
+  Jacobian that consumes it. A nonzero local gradient alone is insufficient.
+  Verify nominal forward parity separately when ST is enabled.
+
+For example, Go1's swing-peak maximum uses height in meters, so
+`standardize=False` keeps softness on the native scale. At a height 1 cm below
+the peak, `standardize=False` alone gave gradient `0.401`; also disabling
+`gated_grad` gave `0.450`, so that point alone does not justify the latter. The
+max contract gives a separate reason: over 201 ST-mode candidate gaps from
+`-0.10` to `+0.10` m at softness `0.05`, `gated_grad=True` produced gradient
+components outside `[0, 1]` at 74 points (range `[-0.0908, 1.0908]`), while
+`False` stayed in `[0.1192, 0.8808]`; both sums were one. The gradient choice
+has the same monotonicity in both ST modes. This local check does not
+determine the best gradient width or establish that the resulting touchdown
+reward gradient is useful.
+
+Running peaks, progress floors, height caps, and instantaneous reward extrema
+need their downstream reward derivatives checked separately: a local max/min
+gradient does not establish a useful policy gradient.
+Contact event comparisons and arithmetic resets pass gradients through the
+sensor gap, event gate, flight history, and touchdown reward. Their relevant
+metric is the Jacobian of that complete chain over nearby timesteps, including
+its sign and width. Go1 checks include nonzero touchdown reward derivatives,
+flight-history derivatives reaching a following touchdown reward, and
+below-peak foot-height derivatives pointing toward the reward's target.
+History checks cover Go1, G1, Spot, T1, H1, Berkeley, and Barkour. These checks
+isolate environment bookkeeping by replacing the physics step with identity;
+they do not establish full rollout gradients through the dynamics solver.
+
+Other optional flags were checked by their local backward contract. The
+default `gated=False` for ReLU and clip yields derivatives in `[0, 1]` across a
+boundary; gated ReLU at `x=-2*softness` has derivative `-0.091`. Product-based
+`any` and `all` retain unit sensitivity to one decisive input at the all-off
+or all-on boundary; geometric-mean reduction divides that sensitivity by the
+number of inputs. These defaults therefore stay unchanged.
+
+## Solver iterations
+
+Locomotion envs raise the constraint solver's Newton iterations above
+upstream MuJoCo Playground: envs that used 1 iteration (Go1, Spot, H1,
+Op3, Barkour) now use 5, and envs that used 3 (G1, T1, Berkeley Humanoid,
+Apollo) now use 10. Line-search iterations stay at 5.
+
+With a single iteration the contact solve is far from converged, and its
+result jumps under tiny input changes. Over a BPTT window the forward
+trajectory is then effectively discontinuous, so first-order (FO)
+gradients carry no signal beyond about 8 control steps. On Go1Handstand,
+at a trained policy's states, the median cosine between BPTT and
+zeroth-order (ZO) gradients over a 32-step window rose from about 0.004
+at 1 iteration to about 0.11 at 4–10 iterations (16 steps: 0.07 to 0.38),
+and BPTT steps then improved the objective about as much as ZO steps.
+Measured on Go1Handstand states, the solver needs a median of 5 Newton
+iterations and at most 10; extra line-search iterations do not change this.
+
+This changes forward physics relative to upstream, so compare against
+upstream results with care. PPO gradients do not pass through the solver,
+so PPO baselines should use the same setting for like-for-like
+comparisons.
+
+TODO: run FO-vs-ZO cosine checks for the 10-iteration envs (G1, T1,
+Berkeley Humanoid, Apollo). Their iteration count was raised from 3 to 10
+without measuring convergence or gradient quality on those models.
+
 Features include:
 
 - Classic control environments from `dm_control`.

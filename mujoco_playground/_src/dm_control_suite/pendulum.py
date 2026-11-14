@@ -39,7 +39,7 @@ def default_config() -> config_dict.ConfigDict:
       episode_length=1000,
       action_repeat=1,
       vision=False,
-      impl="warp",
+      impl="jax",
       naconmax=0,
       njmax=0,
   )
@@ -119,7 +119,12 @@ class SwingUp(mjx_env.MjxEnv):
       metrics: dict[str, Any],
   ) -> jax.Array:
     del action, info, metrics  # Unused.
-    return reward.tolerance(self._pole_vertical(data), (_COSINE_BOUND, 1))
+    return reward.tolerance(
+        self._pole_vertical(data),
+        (_COSINE_BOUND, 1),
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
 
   def _pole_vertical(self, data: mjx.Data) -> jax.Array:
     """Returns vertical (z) component of pole frame."""

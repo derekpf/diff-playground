@@ -21,9 +21,9 @@ import jax.numpy as jp
 from ml_collections import config_dict
 import mujoco
 from mujoco import mjx
-
 from mujoco_playground._src import mjx_env
 from mujoco_playground._src import reward
+from mujoco_playground._src import softjax as sj
 from mujoco_playground._src.dm_control_suite import common
 
 _XML_PATH = mjx_env.ROOT_PATH / "dm_control_suite" / "xmls" / "walker.xml"
@@ -42,7 +42,7 @@ def default_config() -> config_dict.ConfigDict:
       episode_length=1000,
       action_repeat=1,
       vision=False,
-      impl="warp",
+      impl="jax",
       naconmax=50_000,
       njmax=100,
   )
@@ -152,15 +152,17 @@ class PlanarWalker(mjx_env.MjxEnv):
     standing = reward.tolerance(
         torso_height,
         bounds=(_STAND_HEIGHT, float("inf")),
-        margin=_STAND_HEIGHT / 2,
+        margin=sj.div(_STAND_HEIGHT, 2),
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
     )
     metrics["reward/standing"] = standing
 
     torso_upright = data.xmat[self._torso_id, 2, 2]  # zz component.
-    upright = (1 + torso_upright) / 2
+    upright = sj.div(1 + torso_upright, 2)
     metrics["reward/upright"] = upright
 
-    stand_reward = (3 * standing + upright) / 4
+    stand_reward = sj.div(3 * standing + upright, 4)
     metrics["reward/stand"] = stand_reward
 
     return stand_reward
@@ -180,13 +182,15 @@ class PlanarWalker(mjx_env.MjxEnv):
     move_reward = reward.tolerance(
         horizontal_velocity,
         bounds=(self._move_speed, float("inf")),
-        margin=self._move_speed / 2,
+        margin=sj.div(self._move_speed, 2),
         value_at_margin=0.5,
         sigmoid="linear",
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
     )
     metrics["reward/move"] = move_reward
 
-    return stand_reward * (5 * move_reward + 1) / 6
+    return sj.div(stand_reward * (5 * move_reward + 1), 6)
 
   @property
   def xml_path(self) -> str:

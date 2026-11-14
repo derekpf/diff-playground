@@ -41,7 +41,7 @@ def default_config() -> config_dict.ConfigDict:
       episode_length=1000,
       action_repeat=1,
       vision=False,
-      impl="warp",
+      impl="jax",
       naconmax=50_000,
       njmax=50,
   )
@@ -147,7 +147,12 @@ class Hopper(mjx_env.MjxEnv):
   ) -> jax.Array:
     del action, info  # Unused.
 
-    standing = reward.tolerance(self._height(data), (_STAND_HEIGHT, 2))
+    standing = reward.tolerance(
+        self._height(data),
+        (_STAND_HEIGHT, 2),
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
     metrics["reward/standing"] = standing
 
     hopping = reward.tolerance(
@@ -156,6 +161,8 @@ class Hopper(mjx_env.MjxEnv):
         margin=_HOP_SPEED / 2,
         value_at_margin=0.5,
         sigmoid="linear",
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
     )
     metrics["reward/hopping"] = hopping
 
@@ -170,11 +177,21 @@ class Hopper(mjx_env.MjxEnv):
   ) -> jax.Array:
     del info  # Unused.
 
-    standing = reward.tolerance(self._height(data), (_STAND_HEIGHT, 2))
+    standing = reward.tolerance(
+        self._height(data),
+        (_STAND_HEIGHT, 2),
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
     metrics["reward/standing"] = standing
 
     small_control = reward.tolerance(
-        action, margin=1, value_at_margin=0, sigmoid="quadratic"
+        action,
+        margin=1,
+        value_at_margin=0,
+        sigmoid="quadratic",
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
     ).mean()
     small_control = (small_control + 4) / 5
     metrics["reward/small_control"] = small_control

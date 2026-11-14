@@ -223,6 +223,8 @@ class MjxEnv(abc.ABC):
       config: config_dict.ConfigDict,
       config_overrides: Optional[Dict[str, Union[str, int, list[Any]]]] = None,
   ):
+    self.reward_softness: float = 0.0
+    self.reward_st_enable: bool = False
     self._config = config.lock()
     if config_overrides:
       self._config.update_from_flattened_dict(config_overrides)
@@ -267,6 +269,11 @@ class MjxEnv(abc.ABC):
   def sim_dt(self) -> float:
     """Simulation timestep for the environment."""
     return self._sim_dt
+
+  @property
+  def episode_length(self) -> int:
+    """Default episode length in control steps."""
+    return self._config.episode_length
 
   @property
   def n_substeps(self) -> int:

@@ -20,9 +20,9 @@ import jax
 from jax import numpy as jp
 from ml_collections import config_dict
 from mujoco import mjx
-
 from mujoco_playground._src import mjx_env
 from mujoco_playground._src import reward as reward_util
+from mujoco_playground._src import softjax as sj
 from mujoco_playground._src.manipulation.aloha import aloha_constants as consts
 from mujoco_playground._src.manipulation.aloha import base as aloha_base
 
@@ -48,7 +48,7 @@ def default_config() -> config_dict.ConfigDict:
               peg_insertion_reward=8,
           )
       ),
-      impl="warp",
+      impl="jax",
       naconmax=24 * 1024,
       njmax=256,
   )
@@ -131,22 +131,32 @@ class SinglePegInsertion(aloha_base.AlohaEnv):
     # distance from peg end to socket interior.
     socket_ab = socket_entrance_pos - socket_rear_pos
     socket_t = jp.dot(peg_end2_pos - socket_rear_pos, socket_ab)
-    socket_t /= jp.dot(socket_ab, socket_ab) + 1e-6
+    socket_t = sj.div(
+        jp.dot(peg_end2_pos - socket_rear_pos, socket_ab),
+        jp.dot(socket_ab, socket_ab) + 1e-6,
+    )
     nearest_pt = data.site_xpos[self._socket_rear_site] + socket_t * socket_ab
-    peg_end2_dist_to_line = jp.linalg.norm(peg_end2_pos - nearest_pt)
+    peg_end2_dist_to_line = sj.norm(peg_end2_pos - nearest_pt)
 
     out_of_bounds = jp.any(jp.abs(data.xpos[self._socket_body]) > 1.0)
     out_of_bounds |= jp.any(jp.abs(data.xpos[self._peg_body]) > 1.0)
 
     raw_rewards = self._get_reward(
-        data, use_peg_insertion_reward=(peg_end2_dist_to_line < 0.005)
+        data,
+        use_peg_insertion_reward=sj.less(
+            peg_end2_dist_to_line,
+            0.005,
+            softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        ),
     )
     rewards = {
         k: v * self._config.reward_config.scales[k]
         for k, v in raw_rewards.items()
     }
-    reward = sum(rewards.values()) / sum(
-        self._config.reward_config.scales.values()
+    reward = sj.div(
+        sum(rewards.values()),
+        sum(self._config.reward_config.scales.values()),
     )
 
     done = out_of_bounds | jp.isnan(data.qpos).any() | jp.isnan(data.qvel).any()
@@ -185,39 +195,71 @@ class SinglePegInsertion(aloha_base.AlohaEnv):
     return obs
 
   def _get_reward(
-      self, data: mjx.Data, use_peg_insertion_reward: bool
+      self, data: mjx.Data, use_peg_insertion_reward: jax.Array
   ) -> Dict[str, jax.Array]:
-    left_socket_dist = jp.linalg.norm(
+    left_socket_dist = sj.norm(
         data.xpos[self._socket_body] - data.site_xpos[self._left_gripper_site]
     )
     left_reward = reward_util.tolerance(
-        left_socket_dist, (0, 0.001), margin=0.3, sigmoid="linear"
+        left_socket_dist,
+        (0, 0.001),
+        margin=0.3,
+        sigmoid="linear",
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
     )
-    right_peg_dist = jp.linalg.norm(
+    right_peg_dist = sj.norm(
         data.xpos[self._peg_body] - data.site_xpos[self._right_gripper_site]
     )
     right_reward = reward_util.tolerance(
-        right_peg_dist, (0, 0.001), margin=0.3, sigmoid="linear"
+        right_peg_dist,
+        (0, 0.001),
+        margin=0.3,
+        sigmoid="linear",
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
     )
 
     robot_qpos_diff = data.qpos[self._arm_qadr] - self._init_q[self._arm_qadr]
-    left_pose = jp.linalg.norm(robot_qpos_diff[:6])
-    left_pose = reward_util.tolerance(left_pose, (0, 0.01), margin=2.0)
-    right_pose = jp.linalg.norm(robot_qpos_diff[6:])
-    right_pose = reward_util.tolerance(right_pose, (0, 0.01), margin=2.0)
+    left_pose = sj.norm(robot_qpos_diff[:6])
+    left_pose = reward_util.tolerance(
+        left_pose,
+        (0, 0.01),
+        margin=2.0,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
+    right_pose = sj.norm(robot_qpos_diff[6:])
+    right_pose = reward_util.tolerance(
+        right_pose,
+        (0, 0.01),
+        margin=2.0,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
 
-    socket_dist = jp.linalg.norm(
+    socket_dist = sj.norm(
         self._socket_entrance_goal_pos - data.xpos[self._socket_body]
     )
     socket_lift = reward_util.tolerance(
-        socket_dist, (0, 0.01), margin=0.15, sigmoid="linear"
+        socket_dist,
+        (0, 0.01),
+        margin=0.15,
+        sigmoid="linear",
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
     )
 
-    peg_dist = jp.linalg.norm(
+    peg_dist = sj.norm(
         self._peg_end2_goal_pos - data.xpos[self._peg_body]
     )
     peg_lift = reward_util.tolerance(
-        peg_dist, (0, 0.01), margin=0.15, sigmoid="linear"
+        peg_dist,
+        (0, 0.01),
+        margin=0.15,
+        sigmoid="linear",
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
     )
 
     table_collision = self.hand_table_collision(data)
@@ -226,22 +268,37 @@ class SinglePegInsertion(aloha_base.AlohaEnv):
         data.xmat[self._socket_body][2], jp.array([0.0, 0.0, 1.0])
     )
     socket_orientation = reward_util.tolerance(
-        socket_orientation, (0.99, 1.0), margin=0.03, sigmoid="linear"
+        socket_orientation,
+        (0.99, 1.0),
+        margin=0.03,
+        sigmoid="linear",
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
     )
     peg_orientation = jp.dot(
         data.xmat[self._peg_body][2], jp.array([0.0, 0.0, 1.0])
     )
     peg_orientation = reward_util.tolerance(
-        peg_orientation, (0.99, 1.0), margin=0.03, sigmoid="linear"
+        peg_orientation,
+        (0.99, 1.0),
+        margin=0.03,
+        sigmoid="linear",
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
     )
 
-    peg_insertion_dist = jp.linalg.norm(
+    peg_insertion_dist = sj.norm(
         data.site_xpos[self._peg_end2_site]
         - data.site_xpos[self._socket_rear_site]
     )
     peg_insertion_reward = (
         reward_util.tolerance(
-            peg_insertion_dist, (0, 0.001), margin=0.1, sigmoid="linear"
+            peg_insertion_dist,
+            (0, 0.001),
+            margin=0.1,
+            sigmoid="linear",
+            softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
         )
         * use_peg_insertion_reward
     )

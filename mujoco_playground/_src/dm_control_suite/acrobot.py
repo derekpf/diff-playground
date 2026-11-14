@@ -21,9 +21,9 @@ import jax.numpy as jp
 from ml_collections import config_dict
 import mujoco
 from mujoco import mjx
-
 from mujoco_playground._src import mjx_env
 from mujoco_playground._src import reward
+from mujoco_playground._src import softjax as sj
 from mujoco_playground._src.dm_control_suite import common
 
 _XML_PATH = mjx_env.ROOT_PATH / "dm_control_suite" / "xmls" / "acrobot.xml"
@@ -36,7 +36,7 @@ def default_config() -> config_dict.ConfigDict:
       episode_length=1000,
       action_repeat=1,
       vision=False,
-      impl="warp",
+      impl="jax",
       naconmax=0,
       njmax=0,
   )
@@ -125,6 +125,8 @@ class Balance(mjx_env.MjxEnv):
         self._to_target(data),
         bounds=(0.0, self._target_radius),
         margin=self._margin,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
     )
 
   def _horizontal(self, data: mjx.Data) -> jax.Array:
@@ -139,7 +141,7 @@ class Balance(mjx_env.MjxEnv):
     """Returns the distance from the tip to the target."""
     target_pos = data.site_xpos[self._target_site_id]
     tip_pos = data.site_xpos[self._tip_site_id]
-    return jp.linalg.norm(target_pos - tip_pos)
+    return sj.norm(target_pos - tip_pos)
 
   def _orientations(self, data: mjx.Data) -> jax.Array:
     """Returns the sines and cosines of the pole angles."""

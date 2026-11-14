@@ -14,15 +14,18 @@
 # ==============================================================================
 """A port of dm_control.utils.rewards to JAX."""
 
+import numbers
 import warnings
 
 import jax.numpy as jp
+
+from mujoco_playground._src import softjax as sj
 
 # The value returned by tolerance() at `margin` distance from `bounds` interval.
 _DEFAULT_VALUE_AT_MARGIN = 0.1
 
 
-def _sigmoids(x, value_at_1, sigmoid):
+def _sigmoids(x, value_at_1, sigmoid, softness=0.0, st_enable=False):
   if sigmoid in ("cosine", "linear", "quadratic"):
     if not 0 <= value_at_1 < 1:
       raise ValueError(
@@ -36,43 +39,64 @@ def _sigmoids(x, value_at_1, sigmoid):
       )
 
   if sigmoid == "gaussian":
-    scale = jp.sqrt(-2 * jp.log(value_at_1))
+    scale = sj.sqrt(-2 * sj.log(value_at_1))
     return jp.exp(-0.5 * (x * scale) ** 2)
 
   elif sigmoid == "hyperbolic":
-    scale = jp.arccosh(1 / value_at_1)
-    return 1 / jp.cosh(x * scale)
+    scale = jp.arccosh(sj.div(1, value_at_1))
+    return sj.div(1, jp.cosh(x * scale))
 
   elif sigmoid == "long_tail":
-    scale = jp.sqrt(1 / value_at_1 - 1)
-    return 1 / ((x * scale) ** 2 + 1)
+    scale = sj.sqrt(sj.div(1, value_at_1) - 1)
+    return sj.div(1, (x * scale) ** 2 + 1)
 
   elif sigmoid == "reciprocal":
-    scale = 1 / value_at_1 - 1
-    return 1 / (abs(x) * scale + 1)
+    scale = sj.div(1, value_at_1) - 1
+    return sj.div(1, sj.abs(x, softness=softness, st_enable=st_enable) * scale + 1)
 
   elif sigmoid == "cosine":
-    scale = jp.arccos(2 * value_at_1 - 1) / jp.pi
+    scale = sj.div(sj.arccos(2 * value_at_1 - 1), jp.pi)
     scaled_x = x * scale
     with warnings.catch_warnings():
       warnings.filterwarnings(
           action="ignore", message="invalid value encountered in cos"
       )
       cos_pi_scaled_x = jp.cos(jp.pi * scaled_x)
-    return jp.where(abs(scaled_x) < 1, (1 + cos_pi_scaled_x) / 2, 0.0)
+    return sj.where(
+        sj.less(
+            sj.abs(scaled_x, softness=softness, st_enable=st_enable),
+            1, softness=softness, st_enable=st_enable,
+        ),
+        sj.div(1 + cos_pi_scaled_x, 2),
+        0.0,
+    )
 
   elif sigmoid == "linear":
     scale = 1 - value_at_1
     scaled_x = x * scale
-    return jp.where(abs(scaled_x) < 1, 1 - scaled_x, 0.0)
+    return sj.where(
+        sj.less(
+            sj.abs(scaled_x, softness=softness, st_enable=st_enable),
+            1, softness=softness, st_enable=st_enable,
+        ),
+        1 - scaled_x,
+        0.0,
+    )
 
   elif sigmoid == "quadratic":
-    scale = jp.sqrt(1 - value_at_1)
+    scale = sj.sqrt(1 - value_at_1)
     scaled_x = x * scale
-    return jp.where(abs(scaled_x) < 1, 1 - scaled_x**2, 0.0)
+    return sj.where(
+        sj.less(
+            sj.abs(scaled_x, softness=softness, st_enable=st_enable),
+            1, softness=softness, st_enable=st_enable,
+        ),
+        1 - scaled_x**2,
+        0.0,
+    )
 
   elif sigmoid == "tanh_squared":
-    scale = jp.arctanh(jp.sqrt(1 - value_at_1))
+    scale = jp.arctanh(sj.sqrt(1 - value_at_1))
     return 1 - jp.tanh(x * scale) ** 2
 
   else:
@@ -85,6 +109,8 @@ def tolerance(
     margin: float = 0.0,
     sigmoid: str = "gaussian",
     value_at_margin: float = _DEFAULT_VALUE_AT_MARGIN,
+    softness: float = 0.0,
+    st_enable: bool = False,
 ) -> jp.ndarray:
   """Returns 1 when `x` falls inside the bounds, between 0 and 1 otherwise.
 
@@ -103,6 +129,8 @@ def tolerance(
     value_at_margin: A float between 0 and 1 specifying the output value when
       the distance from `x` to the nearest bound is equal to `margin`. Ignored
       if `margin == 0`.
+    softness: Float controlling reward operations and comparisons.
+    st_enable: Whether eligible soft operations use straight-through gradients.
 
   Returns:
     A jax numpy array with values between 0.0 and 1.0.
@@ -114,14 +142,34 @@ def tolerance(
   lower, upper = bounds
   if lower > upper:
     raise ValueError("Lower bound must be <= upper bound.")
-  if margin < 0:
+  if isinstance(margin, numbers.Real) and margin < 0:
     raise ValueError("`margin` must be non-negative.")
 
-  in_bounds = jp.logical_and(lower <= x, x <= upper)
-  if margin == 0:
-    value = jp.where(in_bounds, 1.0, 0.0)
+  in_bounds = sj.logical_and(
+      sj.greater_equal(x, lower, softness=softness, st_enable=st_enable),
+      sj.less_equal(x, upper, softness=softness, st_enable=st_enable),
+  )
+  if isinstance(margin, numbers.Real) and margin == 0:
+    value = in_bounds
   else:
-    d = jp.where(x < lower, lower - x, x - upper) / margin
-    value = jp.where(in_bounds, 1.0, _sigmoids(d, value_at_margin, sigmoid))
+    # ``sj.where`` is an arithmetic blend, so avoid constructing an unused
+    # infinite branch (which would otherwise produce ``0 * inf = NaN``).
+    safe_lower = jp.where(jp.isinf(lower), x, lower)
+    safe_upper = jp.where(jp.isinf(upper), x, upper)
+    d = sj.div(
+        sj.where(
+            sj.less(x, lower, softness=softness, st_enable=st_enable),
+            safe_lower - x,
+            x - safe_upper,
+        ),
+        margin,
+    )
+    value = sj.where(
+        in_bounds,
+        1.0,
+        _sigmoids(d, value_at_margin, sigmoid, softness, st_enable),
+    )
+    if not isinstance(margin, numbers.Real):
+      value = sj.where(margin == 0, in_bounds, value)
 
   return value

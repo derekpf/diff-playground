@@ -3089,6 +3089,7 @@ dependencies = [
     { name = "mujoco-mjx" },
     { name = "orbax-checkpoint" },
     { name = "pytest" },
+    { name = "softjax" },
     { name = "tqdm" },
     { name = "warp-lang" },
 ]
@@ -3175,6 +3176,7 @@ requires-dist = [
     { name = "pytype", marker = "extra == 'dev'" },
     { name = "rsl-rl-lib", marker = "extra == 'learning'", specifier = ">=3.0.0" },
     { name = "ruff", marker = "extra == 'dev'" },
+    { name = "softjax" },
     { name = "tqdm" },
     { name = "wandb", marker = "extra == 'learning'" },
     { name = "warp-lang", specifier = ">=1.14" },

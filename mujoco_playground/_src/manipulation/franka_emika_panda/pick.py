@@ -22,6 +22,7 @@ from ml_collections import config_dict
 from mujoco import mjx
 from mujoco.mjx._src import math
 from mujoco_playground._src import mjx_env
+from mujoco_playground._src import softjax as sj
 from mujoco_playground._src.manipulation.franka_emika_panda import panda
 from mujoco_playground._src.mjx_env import State  # pylint: disable=g-importing-member
 import numpy as np
@@ -47,7 +48,7 @@ def default_config() -> config_dict.ConfigDict:
               robot_target_qpos=0.3,
           )
       ),
-      impl='warp',
+      impl='jax',
       naconmax=24 * 2048,
       naccdmax=24 * 2048,
       njmax=128,
@@ -165,7 +166,14 @@ class PandaPickCube(panda.PandaBase):
         k: v * self._config.reward_config.scales[k]
         for k, v in raw_rewards.items()
     }
-    reward = jp.clip(sum(rewards.values()), -1e4, 1e4)
+    reward = sj.clip(
+        sum(rewards.values()),
+        -1e4,
+        1e4,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+        gated=False,
+    )
     box_pos = data.xpos[self._obj_body]
     out_of_bounds = jp.any(jp.abs(box_pos) > 1.0)
     out_of_bounds |= box_pos[2] < 0.0
@@ -185,15 +193,15 @@ class PandaPickCube(panda.PandaBase):
     target_pos = info["target_pos"]
     box_pos = data.xpos[self._obj_body]
     gripper_pos = data.site_xpos[self._gripper_site]
-    pos_err = jp.linalg.norm(target_pos - box_pos)
+    pos_err = sj.norm(target_pos - box_pos)
     box_mat = data.xmat[self._obj_body]
     target_mat = math.quat_to_mat(data.mocap_quat[self._mocap_target])
-    rot_err = jp.linalg.norm(target_mat.ravel()[:6] - box_mat.ravel()[:6])
+    rot_err = sj.norm(target_mat.ravel()[:6] - box_mat.ravel()[:6])
 
     box_target = 1 - jp.tanh(5 * (0.9 * pos_err + 0.1 * rot_err))
-    gripper_box = 1 - jp.tanh(5 * jp.linalg.norm(box_pos - gripper_pos))
+    gripper_box = 1 - jp.tanh(5 * sj.norm(box_pos - gripper_pos))
     robot_target_qpos = 1 - jp.tanh(
-        jp.linalg.norm(
+        sj.norm(
             data.qpos[self._robot_arm_qposadr]
             - self._init_q[self._robot_arm_qposadr]
         )
@@ -201,15 +209,34 @@ class PandaPickCube(panda.PandaBase):
 
     # Check for collisions with the floor
     hand_floor_collision = [
-        data.sensordata[self._mj_model.sensor_adr[sensor_id]] > 0
+        data.sensordata[self._mj_model.sensor_adr[sensor_id]]
         for sensor_id in self._floor_hand_found_sensor
     ]
-    floor_collision = sum(hand_floor_collision) > 0
-    no_floor_collision = (1 - floor_collision).astype(float)
+    floor_collision = sj.any(
+        sj.greater(
+            jp.array(hand_floor_collision),
+            0.0,
+            softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        ),
+        axis=-1,
+    )
+    no_floor_collision = 1 - floor_collision
 
-    info["reached_box"] = 1.0 * jp.maximum(
-        info["reached_box"],
-        (jp.linalg.norm(box_pos - gripper_pos) < 0.012),
+    info["reached_box"] = sj.max(
+        jp.stack([
+            info["reached_box"],
+            sj.less(
+                sj.norm(box_pos - gripper_pos),
+                0.012,
+                softness=self.reward_softness,
+                st_enable=self.reward_st_enable,
+            ),
+        ]),
+        softness=self.reward_softness,
+        standardize=False,
+        gated_grad=True,
+        st_enable=self.reward_st_enable,
     )
 
     rewards = {

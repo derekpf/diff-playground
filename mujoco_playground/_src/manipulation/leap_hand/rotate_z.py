@@ -21,8 +21,8 @@ import jax.numpy as jp
 from ml_collections import config_dict
 from mujoco import mjx
 import numpy as np
-
 from mujoco_playground._src import mjx_env
+from mujoco_playground._src import softjax as sj
 from mujoco_playground._src.manipulation.leap_hand import base as leap_hand_base
 from mujoco_playground._src.manipulation.leap_hand import leap_hand_constants as consts
 
@@ -53,7 +53,7 @@ def default_config() -> config_dict.ConfigDict:
               action_rate=0.0,
           ),
       ),
-      impl='warp',
+      impl='jax',
       naconmax=30 * 8192,
       njmax=160,
   )
@@ -144,9 +144,11 @@ class CubeRotateZAxis(leap_hand_base.LeapHandEnv):
     state.info["motor_targets"] = motor_targets
 
     obs = self._get_obs(data, state.info, state.obs["state"])
-    done = self._get_termination(data)
+    done, soft_done = self._get_termination(data)
 
-    rewards = self._get_reward(data, action, state.info, state.metrics, done)
+    rewards = self._get_reward(
+        data, action, state.info, state.metrics, soft_done
+    )
     rewards = {
         k: v * self._config.reward_config.scales[k] for k, v in rewards.items()
     }
@@ -162,9 +164,16 @@ class CubeRotateZAxis(leap_hand_base.LeapHandEnv):
     state = state.replace(data=data, obs=obs, reward=reward, done=done)
     return state
 
-  def _get_termination(self, data: mjx.Data) -> jax.Array:
-    fall_termination = self.get_cube_position(data)[2] < -0.05
-    return fall_termination
+  def _get_termination(self, data: mjx.Data) -> tuple[jax.Array, jax.Array]:
+    cube_z = self.get_cube_position(data)[2]
+    done = cube_z < -0.05
+    soft_done = sj.less(
+        cube_z,
+        -0.05,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
+    return done, soft_done
 
   def _get_obs(
       self, data: mjx.Data, info: dict[str, Any], obs_history: jax.Array
@@ -217,7 +226,7 @@ class CubeRotateZAxis(leap_hand_base.LeapHandEnv):
       action: jax.Array,
       info: dict[str, Any],
       metrics: dict[str, Any],
-      done: jax.Array,
+      soft_done: jax.Array,
   ) -> dict[str, jax.Array]:
     del metrics  # Unused.
     cube_pos = self.get_cube_position(data)
@@ -228,7 +237,7 @@ class CubeRotateZAxis(leap_hand_base.LeapHandEnv):
     return {
         "angvel": self._reward_angvel(cube_angvel, cube_pos_error),
         "linvel": self._cost_linvel(cube_linvel),
-        "termination": done,
+        "termination": soft_done,
         "action_rate": self._cost_action_rate(
             action, info["last_act"], info["last_last_act"]
         ),
@@ -245,10 +254,26 @@ class CubeRotateZAxis(leap_hand_base.LeapHandEnv):
   def _cost_energy(
       self, qvel: jax.Array, qfrc_actuator: jax.Array
   ) -> jax.Array:
-    return jp.sum(jp.abs(qvel) * jp.abs(qfrc_actuator))
+    return jp.sum(
+        sj.abs(
+            qvel, softness=self.reward_softness, st_enable=self.reward_st_enable
+        )
+        * sj.abs(
+            qfrc_actuator,
+            softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        )
+    )
 
   def _cost_linvel(self, cube_linvel: jax.Array) -> jax.Array:
-    return jp.linalg.norm(cube_linvel, ord=1, axis=-1)
+    return jp.sum(
+        sj.abs(
+            cube_linvel,
+            softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        ),
+        axis=-1,
+    )
 
   def _reward_angvel(
       self, cube_angvel: jax.Array, cube_pos_error: jax.Array

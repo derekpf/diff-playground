@@ -28,8 +28,8 @@ import jax.numpy as jp
 from ml_collections import config_dict
 import mujoco
 from mujoco import mjx
-
 from mujoco_playground._src import mjx_env
+from mujoco_playground._src import softjax as sj
 from mujoco_playground._src.dm_control_suite import common
 
 _XML_PATH = mjx_env.ROOT_PATH / "dm_control_suite" / "xmls" / "finger.xml"
@@ -48,7 +48,7 @@ def default_config() -> config_dict.ConfigDict:
       episode_length=1000,
       action_repeat=1,
       vision=False,
-      impl="warp",
+      impl="jax",
       naconmax=25_000,
       njmax=50,
   )
@@ -150,8 +150,12 @@ class Spin(mjx_env.MjxEnv):
       metrics: dict[str, Any],
   ) -> jax.Array:
     del metrics, action, info  # Unused.
-    reward = self._hinge_velocity(data) <= -_SPIN_VELOCITY
-    return reward.astype(float)
+    return sj.less_equal(
+        self._hinge_velocity(data),
+        -_SPIN_VELOCITY,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
 
   def _hinge_velocity(self, data: mjx.Data) -> jax.Array:
     return mjx_env.get_sensor_data(self.mj_model, data, "hinge_velocity")[0]
@@ -302,8 +306,12 @@ class Turn(mjx_env.MjxEnv):
       metrics: dict[str, Any],
   ) -> jax.Array:
     del metrics, action, info  # Unused.
-    reward = self._dist_to_target(data) <= 0.0
-    return reward.astype(float)
+    return sj.less_equal(
+        self._dist_to_target(data),
+        0.0,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
 
   def _hinge_velocity(self, data: mjx.Data) -> jax.Array:
     return mjx_env.get_sensor_data(self.mj_model, data, "hinge_velocity")[0]
@@ -351,7 +359,7 @@ class Turn(mjx_env.MjxEnv):
 
   def _dist_to_target(self, data: mjx.Data) -> jax.Array:
     """Returns the signed distance to the target surface, negative is inside."""
-    return jp.linalg.norm(self._to_target(data)) - self._target_size_size
+    return sj.norm(self._to_target(data)) - self._target_size_size
 
   @property
   def xml_path(self) -> str:

@@ -290,6 +290,8 @@ def main(argv):
   env = registry.load(
       _ENV_NAME.value, config=env_cfg, config_overrides=env_cfg_overrides
   )
+  if not _EPISODE_LENGTH.present:
+    ppo_params.episode_length = env.episode_length
   if _RUN_EVALS.present:
     ppo_params.run_evals = _RUN_EVALS.value
   if _LOG_TRAINING_METRICS.present:

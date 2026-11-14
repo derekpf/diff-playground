@@ -1,0 +1,119 @@
+# Copyright 2025 DeepMind Technologies Limited
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+"""Project-wide softjax configuration."""
+
+import functools
+import numbers
+from typing import Final
+
+import jax.numpy as _jp
+import softjax as _softjax
+
+_DEFAULT_SOFTNESS: Final[float] = 0.0
+
+
+def _with_softness(fn, softness_position):
+  """Adds the project default and maps zero softness to hard mode."""
+
+  mode_position = softness_position + 1
+
+  @functools.wraps(fn)
+  def wrapped(*args, **kwargs):
+    if len(args) <= softness_position and "softness" not in kwargs:
+      kwargs["softness"] = _DEFAULT_SOFTNESS
+    softness = (
+        args[softness_position]
+        if len(args) > softness_position
+        else kwargs.get("softness")
+    )
+    if (
+        isinstance(softness, numbers.Real)
+        and softness == 0.0
+        and len(args) <= mode_position
+        and "mode" not in kwargs
+    ):
+      kwargs["mode"] = "hard"
+    return fn(*args, **kwargs)
+
+  return wrapped
+
+
+def _with_st_enable(fn, st_fn, softness_position):
+  """Selects ordinary or straight-through gradients for a soft operation."""
+
+  wrapped = _with_softness(fn, softness_position)
+  wrapped_st = _with_softness(st_fn, softness_position)
+
+  @functools.wraps(fn)
+  def select(*args, st_enable: bool = False, **kwargs):
+    return (wrapped_st if st_enable else wrapped)(*args, **kwargs)
+
+  return select
+
+
+def _clip(x, a, b, softness=0.1, mode="smooth", gated=False):
+  """Soft `jnp.clip` that, like `jnp.clip`, accepts `None` for either bound.
+
+  One-sided bounds use the limits of softjax's two-sided relaxation
+  `a + softrelu(x - a) - softrelu(x - b)` as the missing bound goes to
+  infinity, so `clip(x, a, None)` is `a + softrelu(x - a)` and
+  `clip(x, None, b)` is `x - softrelu(x - b)`.
+  """
+  if a is not None and b is not None:
+    return _softjax.clip(x, a, b, softness=softness, mode=mode, gated=gated)
+  if a is None and b is None:
+    raise ValueError("At most one of `a` and `b` may be None.")
+  if mode == "hard":
+    return _jp.clip(x, a, b)
+  relu = functools.partial(
+      _softjax.softrelu, softness=softness, mode=mode, gated=gated
+  )
+  if b is None:
+    return a + relu(x - a)
+  return x - relu(x - b)
+
+
+# Keep the external softjax argument order while providing the project default
+# when callers omit softness.
+abs = _with_st_enable(_softjax.abs, _softjax.abs_st, 1)
+abs_st = _with_softness(_softjax.abs_st, 1)
+clip = _with_st_enable(_clip, _softjax.st(_clip), 3)
+greater = _with_st_enable(_softjax.greater, _softjax.greater_st, 2)
+greater_st = _with_softness(_softjax.greater_st, 2)
+greater_equal = _with_st_enable(_softjax.greater_equal, _softjax.greater_equal_st, 2)
+greater_equal_st = _with_softness(_softjax.greater_equal_st, 2)
+less = _with_st_enable(_softjax.less, _softjax.less_st, 2)
+less_st = _with_softness(_softjax.less_st, 2)
+less_equal = _with_st_enable(_softjax.less_equal, _softjax.less_equal_st, 2)
+less_equal_st = _with_softness(_softjax.less_equal_st, 2)
+max = _with_st_enable(_softjax.max, _softjax.max_st, 3)
+max_st = _with_softness(_softjax.st(_softjax.max), 3)
+min = _with_st_enable(_softjax.min, _softjax.min_st, 3)
+relu = _with_st_enable(_softjax.relu, _softjax.relu_st, 1)
+relu_st = _with_softness(_softjax.relu_st, 1)
+
+# Operations without a softness argument are passed through unchanged.
+all = _softjax.all
+any = _softjax.any
+arccos = _softjax.arccos
+arcsin = _softjax.arcsin
+div = _softjax.div
+log = _softjax.log
+logical_and = _softjax.logical_and
+logical_not = _softjax.logical_not
+logical_or = _softjax.logical_or
+norm = _softjax.norm
+sqrt = _softjax.sqrt
+where = _softjax.where

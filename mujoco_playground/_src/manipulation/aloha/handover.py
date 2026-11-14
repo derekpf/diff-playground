@@ -20,8 +20,8 @@ import jax
 from jax import numpy as jp
 from ml_collections import config_dict
 from mujoco import mjx
-
 from mujoco_playground._src import mjx_env
+from mujoco_playground._src import softjax as sj
 from mujoco_playground._src.manipulation.aloha import aloha_constants as consts
 from mujoco_playground._src.manipulation.aloha import base as aloha_base
 
@@ -41,7 +41,7 @@ def default_config() -> config_dict.ConfigDict:
               no_table_collision=0.3,
           ),
       ),
-      impl='warp',
+      impl='jax',
       naconmax=24 * 2048,
       njmax=88,
   )
@@ -50,7 +50,7 @@ def default_config() -> config_dict.ConfigDict:
 # Default parameters: 12 cm decay range centered around x = 0.
 def logistic_barrier(x: jax.Array, x0=0, k=100, direction=1.0):
   # direction = 1.0: Penalize going to the left.
-  return 1 / (1 + jp.exp(-k * direction * (x - x0)))
+  return sj.div(1.0, 1 + jp.exp(-k * direction * (x - x0)))
 
 
 class HandOver(aloha_base.AlohaEnv):
@@ -163,14 +163,21 @@ class HandOver(aloha_base.AlohaEnv):
         k: v * self._config.reward_config.scales[k]
         for k, v in raw_rewards.items()
     }
-    potential = sum(rewards.values()) / sum(
-        self._config.reward_config.scales.values()
+    potential = sj.div(
+        sum(rewards.values()),
+        sum(self._config.reward_config.scales.values()),
     )
 
     # Reward progress. Clip at zero to not penalize mistakes like dropping
     # during exploration.
-    reward = jp.maximum(
-        potential - state.info['prev_potential'], jp.zeros_like(potential)
+    reward = sj.max(
+        jp.stack(
+            [potential - state.info['prev_potential'], jp.zeros_like(potential)]
+        ),
+        softness=self.reward_softness,
+        standardize=False,
+        gated_grad=True,
+        st_enable=self.reward_st_enable,
     )
 
     box_pos = data.xpos[self._box_body]
@@ -183,18 +190,32 @@ class HandOver(aloha_base.AlohaEnv):
     )
     reward += 0.02 * potential * condition
 
-    state.info['prev_potential'] = jp.maximum(
-        potential, state.info['prev_potential']
+    state.info['prev_potential'] = sj.max(
+        jp.stack([potential, state.info['prev_potential']]),
+        softness=self.reward_softness,
+        standardize=False,
+        gated_grad=True,
+        st_enable=self.reward_st_enable,
     )
-    reward = jp.where(newly_reset, 0.0, reward)  # Prevent first-step artifact
+    reward = sj.where(sj.logical_not(newly_reset), reward, 0.0)
 
     # No reward information if you've dropped a block after you've picked it up.
     picked = box_pos[2] > 0.15
     state.info['episode_picked'] = jp.logical_or(
         state.info['episode_picked'], picked
     )
+    dropped_reward = sj.logical_and(
+        sj.less(
+            box_pos[2],
+            0.05,
+            softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        ),
+        state.info['episode_picked'],
+    )
+    reward += dropped_reward * -0.1  # Small penalty.
+    # Episodes still end on the hard drop condition.
     dropped = (box_pos[2] < 0.05) & state.info['episode_picked']
-    reward += dropped.astype(float) * -0.1  # Small penalty.
 
     out_of_bounds = jp.any(jp.abs(box_pos) > 1.0)
     out_of_bounds |= box_pos[2] < 0.0
@@ -220,7 +241,7 @@ class HandOver(aloha_base.AlohaEnv):
 
   def _get_reward(self, data: mjx.Data, info: Dict[str, Any]) -> Dict[str, Any]:
     def distance(x, y):
-      return jp.exp(-10 * jp.linalg.norm(x - y))
+      return jp.exp(-10 * sj.norm(x - y))
 
     box_top = data.site_xpos[self._box_top_site]
     box_bottom = data.site_xpos[self._box_bottom_site]
@@ -228,8 +249,18 @@ class HandOver(aloha_base.AlohaEnv):
     l_gripper = data.site_xpos[self._left_gripper_site]
     r_gripper = data.site_xpos[self._right_gripper_site]
 
-    pre = jp.where(box[0] < self._left_thresh, 1.0, 0.0)
-    past = jp.where(box[0] >= self._right_thresh, 1.0, 0.0)
+    pre = sj.less(
+        box[0],
+        self._left_thresh,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
+    past = sj.greater_equal(
+        box[0],
+        self._right_thresh,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
     btwn = (1 - pre) * (1 - past)
 
     #### Gripper Box
@@ -243,7 +274,13 @@ class HandOver(aloha_base.AlohaEnv):
     box_handover = distance(box, self._handover_pos)
     # Maintain this term after RH takes box away.
     hand_handover = distance(l_gripper, self._handover_pos) * past
-    box_handover = jp.maximum(box_handover, hand_handover)
+    box_handover = sj.max(
+        jp.stack([box_handover, hand_handover]),
+        softness=self.reward_softness,
+        standardize=False,
+        gated_grad=True,
+        st_enable=self.reward_st_enable,
+    )
 
     #### Bring box to target
     box_target = distance(info['target_pos'], box) * (r_rg + r_rg_bias)

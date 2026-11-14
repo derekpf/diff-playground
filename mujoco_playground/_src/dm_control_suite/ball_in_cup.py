@@ -21,8 +21,8 @@ import jax.numpy as jp
 from ml_collections import config_dict
 import mujoco
 from mujoco import mjx
-
 from mujoco_playground._src import mjx_env
+from mujoco_playground._src import softjax as sj
 from mujoco_playground._src.dm_control_suite import common
 
 _XML_PATH = mjx_env.ROOT_PATH / "dm_control_suite" / "xmls" / "ball_in_cup.xml"
@@ -35,7 +35,7 @@ def default_config() -> config_dict.ConfigDict:
       episode_length=1000,
       action_repeat=1,
       vision=False,
-      impl="warp",
+      impl="jax",
       naconmax=10_000,
       njmax=25,
   )
@@ -112,11 +112,18 @@ class BallInCup(mjx_env.MjxEnv):
     del action, metrics, info  # Unused.
     target = data.site_xpos[self._target_site_id, [0, 2]]
     ball = data.xpos[self._ball_body_id, [0, 2]]
-    ball_to_target = jp.abs(target - ball)
-    inside = jp.where(
-        ball_to_target < self._target_size - self._ball_size, 1.0, 0.0
+    ball_to_target = sj.abs(
+        target - ball,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
     )
-    return jp.prod(inside, axis=-1)
+    inside = sj.less(
+        ball_to_target,
+        self._target_size - self._ball_size,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
+    return sj.all(inside, axis=-1)
 
   @property
   def xml_path(self) -> str:

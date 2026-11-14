@@ -20,9 +20,10 @@ ENV_NAMES = ('HopperHop',)
 ROLLOUT_MODES = (
     None,
     'hard',
+    'smooth',
     'c2',
 )
-SOFTJAX_MODES = ('hard', 'c2')
+SOFTJAX_MODES = ('hard', 'smooth', 'c2')
 NUM_STEPS = 2
 
 

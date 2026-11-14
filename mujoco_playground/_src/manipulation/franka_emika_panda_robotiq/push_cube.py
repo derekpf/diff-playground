@@ -22,8 +22,8 @@ from ml_collections import config_dict
 from mujoco import mjx
 from mujoco.mjx._src import math
 from mujoco.mjx._src import types
-
 from mujoco_playground._src import mjx_env
+from mujoco_playground._src import softjax as sj
 from mujoco_playground._src import reward as reward_util
 from mujoco_playground._src.manipulation.franka_emika_panda_robotiq import panda_robotiq
 import numpy as np
@@ -84,7 +84,7 @@ def default_config():
               action_rate=-0.1,
           ),
       ),
-      impl="warp",
+      impl="jax",
       naconmax=32 * 8192,
       njmax=256,
   )
@@ -237,11 +237,18 @@ class PandaRobotiqPushCube(panda_robotiq.PandaRobotiqBase):
         k: v * self._config.reward_config.reward_scales[k]
         for k, v in rewards.items()
     }
-    reward = jp.clip(sum(rewards.values()), -1e4, 1e4)
+    reward = sj.clip(
+        sum(rewards.values()),
+        -1e4,
+        1e4,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+        gated=False,
+    )
     reward_scale_sum = sum(
         self._config.reward_config.reward_scales[k] for k in rewards
     )
-    reward /= reward_scale_sum
+    reward = sj.div(reward, reward_scale_sum)
 
     # termination reward
     termination = self._get_termination(state.data)
@@ -249,8 +256,9 @@ class PandaRobotiqPushCube(panda_robotiq.PandaRobotiqBase):
 
     # success reward
     state, success, success_wait = self._get_success(state)
-    reward += self._config.reward_config.success_wait_reward * success_wait
-    reward += self._config.reward_config.success_reward * success
+    success_reward, success_wait_reward = self._get_success_reward(state)
+    reward += self._config.reward_config.success_wait_reward * success_wait_reward
+    reward += self._config.reward_config.success_reward * success_reward
 
     # finalize reward
     reward *= self.dt
@@ -329,7 +337,7 @@ class PandaRobotiqPushCube(panda_robotiq.PandaRobotiqBase):
     ori_error = self._orientation_error(box_quat, target_quat)
 
     # get success condition
-    success_cond_1 = jp.linalg.norm(target_pos - box_pos) < 0.03  # 3cm
+    success_cond_1 = sj.norm(target_pos - box_pos) < 0.03  # 3cm
     success_cond_2 = ori_error < (10 / 180 * jp.pi)  # 10 degrees
     success_cond_3 = (
         state.info["success_step_count"]
@@ -391,28 +399,46 @@ class PandaRobotiqPushCube(panda_robotiq.PandaRobotiqBase):
     target_pos = data.mocap_pos[self._mocap_target, :].ravel()
     box_pos = data.xpos[self._obj_body]
     side_dir = box_pos - target_pos
-    side_dir = math.normalize(side_dir) * 0.1 * (math.norm(side_dir) > 1e-3)
+    side_dir = (
+        sj.div(side_dir, sj.norm(side_dir))
+        * 0.1
+        * sj.greater(
+            sj.norm(side_dir),
+            1e-3,
+            softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        )
+    )
     box_side_pos = side_dir + box_pos
     gripper_pos = data.site_xpos[self._gripper_site]
 
     gripper_box = reward_util.tolerance(
-        jp.linalg.norm(box_side_pos - gripper_pos),
+        sj.norm(box_side_pos - gripper_pos),
         (0, 0.1),
         margin=1.0,
         sigmoid="linear",
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
     )
 
     box_target = reward_util.tolerance(
-        jp.linalg.norm(box_pos[:2] - target_pos[:2]),
+        sj.norm(box_pos[:2] - target_pos[:2]),
         (0, 0.005),
         margin=0.4,
         sigmoid="reciprocal",
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
     )
 
     target_quat = data.mocap_quat[self._mocap_target, :].squeeze()
     ori_error = self._orientation_error(data.xquat[self._obj_body], target_quat)
     box_orientation = reward_util.tolerance(
-        ori_error, (0, 0.2), margin=jp.pi, sigmoid="reciprocal"
+        ori_error,
+        (0, 0.2),
+        margin=jp.pi,
+        sigmoid="reciprocal",
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
     )
 
     hand_box_normal = []
@@ -422,36 +448,52 @@ class PandaRobotiqPushCube(panda_robotiq.PandaRobotiqBase):
       hand_box_normal.append(data.sensordata[adr : adr + dim])
 
     hand_box_normal = jp.mean(jp.array(hand_box_normal), axis=0)
-    hand_box_normal = math.normalize(hand_box_normal)
+    hand_box_normal = sj.div(hand_box_normal, sj.norm(hand_box_normal))
     hand_box_normal_side = jp.cross(jp.array([0.0, 0.0, 1.0]), hand_box_normal)
-    gripper_collision_side = jp.linalg.norm(hand_box_normal_side)
+    gripper_collision_side = sj.norm(hand_box_normal_side)
 
     # Action regularization.
     robot_target_qpos = reward_util.tolerance(
-        jp.linalg.norm(
+        sj.norm(
             data.qpos[self._robot_arm_qposadr]
             - self._init_q[self._robot_arm_qposadr]
         ),
         (0, 0.5),
         margin=4.5,
         sigmoid="linear",
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
     )
-    joint_vel_mse = jp.linalg.norm(
+    joint_vel_mse = sj.norm(
         data.qvel[self._qd_low_joint_pos_index : self._qd_upper_joint_pos_index]
     )
     joint_vel = reward_util.tolerance(
-        joint_vel_mse, (0, 0.5), margin=2.0, sigmoid="reciprocal"
+        joint_vel_mse,
+        (0, 0.5),
+        margin=2.0,
+        sigmoid="reciprocal",
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
     )
-    total_command = jp.linalg.norm(action)
-    action_rate = jp.linalg.norm(action - info["last_action"])
+    total_command = sj.norm(action)
+    action_rate = sj.norm(action - info["last_action"])
 
-    joints_near_vel_limits = jp.any(
-        jp.logical_or(
-            data.qvel[self._robot_arm_qposadr]
-            > (self._jnt_vel_range[:, 1] * self._joint_vel_limit_percentage),
-            data.qvel[self._robot_arm_qposadr]
-            < (self._jnt_vel_range[:, 0] * self._joint_vel_limit_percentage),
-        )
+    joints_near_vel_limits = sj.any(
+        sj.logical_or(
+            sj.greater(
+                data.qvel[self._robot_arm_qposadr],
+                self._jnt_vel_range[:, 1] * self._joint_vel_limit_percentage,
+                softness=self.reward_softness,
+                st_enable=self.reward_st_enable,
+            ),
+            sj.less(
+                data.qvel[self._robot_arm_qposadr],
+                self._jnt_vel_range[:, 0] * self._joint_vel_limit_percentage,
+                softness=self.reward_softness,
+                st_enable=self.reward_st_enable,
+            ),
+        ),
+        axis=-1,
     )
 
     return {
@@ -468,9 +510,50 @@ class PandaRobotiqPushCube(panda_robotiq.PandaRobotiqBase):
 
   def _orientation_error(self, object_quat, target_quat) -> jax.Array:
     quat_diff = math.quat_mul(object_quat, math.quat_inv(target_quat))
-    quat_diff = math.normalize(quat_diff)
-    ori_error = 2.0 * jp.asin(jp.clip(math.norm(quat_diff[1:]), max=1.0))
+    quat_diff = sj.div(quat_diff, sj.norm(quat_diff))
+    ori_error = 2.0 * sj.arcsin(
+        sj.clip(
+            sj.norm(quat_diff[1:]),
+            0.0,
+            1.0,
+            softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+            gated=False,
+        )
+    )
     return ori_error
+
+  def _get_success_reward(
+      self, state: mjx_env.State
+  ) -> tuple[jax.Array, jax.Array]:
+    data = state.data
+    target_pos = data.mocap_pos[self._mocap_target, :].ravel()
+    target_quat = data.mocap_quat[self._mocap_target, :].ravel()
+    box_pos = data.xpos[self._obj_body]
+    box_quat = data.xquat[self._obj_body]
+    position_success = sj.less(
+        sj.norm(target_pos - box_pos),
+        0.03,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
+    orientation_success = sj.less(
+        self._orientation_error(box_quat, target_quat),
+        10 / 180 * jp.pi,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
+    sub_success = sj.logical_and(position_success, orientation_success)
+    success = sj.logical_and(
+        sub_success,
+        sj.greater_equal(
+            state.info["success_step_count"],
+            self._config.reward_config.success_step_count,
+            softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        ),
+    )
+    return success, sub_success
 
   def _get_obs(self, state: mjx_env.State) -> jax.Array:
     obs = self._get_single_obs(state.data, state.info)

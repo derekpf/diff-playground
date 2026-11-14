@@ -21,9 +21,9 @@ import jax.numpy as jp
 from ml_collections import config_dict
 from mujoco import mjx
 import numpy as np
-
 from mujoco_playground._src import gait
 from mujoco_playground._src import mjx_env
+from mujoco_playground._src import softjax as sj
 from mujoco_playground._src.locomotion.h1 import base as h1_base
 from mujoco_playground._src.locomotion.h1 import h1_constants as consts
 
@@ -77,7 +77,7 @@ def default_config() -> config_dict.ConfigDict:
       gait_frequency=[0.5, 2.0],
       gaits=["walk"],
       foot_height=[0.08, 0.4],
-      impl="warp",
+      impl="jax",
       naconmax=8 * 8192,
       njmax=19 + 8 * 4,
   )
@@ -188,7 +188,7 @@ class JoystickGaitTracking(h1_base.H1Env):
         "qvel_history": qvel_history,
         "swing_peak": jp.zeros(2),
         "feet_air_time": jp.zeros(2),
-        "last_contact": jp.zeros(2, dtype=bool),
+        "last_contact": jp.zeros(2, dtype=data.sensordata.dtype),
         "lin_vel": jp.zeros(3),
         "ang_vel": jp.zeros(3),
         "gait_freq": gait_freq,
@@ -225,27 +225,67 @@ class JoystickGaitTracking(h1_base.H1Env):
     )
     state.info["motor_targets"] = motor_targets
 
-    left_feet_contact = jp.array([
-        data.sensordata[sensorid] > 0
+    left_contact_values = jp.array([
+        data.sensordata[self._mj_model.sensor_adr[sensorid]]
         for sensorid in self._left_foot_floor_found_sensor
     ])
-    right_feet_contact = jp.array([
-        data.sensordata[sensorid] > 0
+    right_contact_values = jp.array([
+        data.sensordata[self._mj_model.sensor_adr[sensorid]]
         for sensorid in self._right_foot_floor_found_sensor
     ])
+    left_feet_contact = left_contact_values > 0
+    right_feet_contact = right_contact_values > 0
     contact = jp.hstack([jp.any(left_feet_contact), jp.any(right_feet_contact)])
-    contact_filt = contact | state.info["last_contact"]
-    first_contact = (state.info["feet_air_time"] > 0.0) * contact_filt
+    contact_reward = jp.hstack([
+        sj.any(
+            sj.greater(
+                left_contact_values,
+                0.0,
+                softness=self.reward_softness,
+                st_enable=self.reward_st_enable,
+            )
+        ),
+        sj.any(
+            sj.greater(
+                right_contact_values,
+                0.0,
+                softness=self.reward_softness,
+                st_enable=self.reward_st_enable,
+            )
+        ),
+    ])
+    first_contact_reward = sj.logical_and(
+        sj.greater(
+            state.info["feet_air_time"],
+            0.0,
+            softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        ),
+        sj.logical_or(contact_reward, state.info["last_contact"]),
+    )
     state.info["feet_air_time"] += self.dt
     p_f = data.site_xpos[self._feet_site_id]
     p_fz = p_f[..., -1]
-    state.info["swing_peak"] = jp.maximum(state.info["swing_peak"], p_fz)
+    state.info["swing_peak"] = sj.max(
+        jp.stack([state.info["swing_peak"], p_fz]),
+        axis=0,
+        softness=self.reward_softness,
+        standardize=False,
+        gated_grad=True,
+        st_enable=self.reward_st_enable,
+    )
 
     obs = self._get_obs(data, state.info, noise_rng, contact)
     done = self._get_termination(data)
 
     pos, neg = self._get_reward(
-        data, action, state.info, state.metrics, done, first_contact, contact
+        data,
+        action,
+        state.info,
+        state.metrics,
+        done,
+        first_contact_reward,
+        contact_reward,
     )
     pos = {k: v * self._config.reward_config.scales[k] for k, v in pos.items()}
     neg = {k: v * self._config.reward_config.scales[k] for k, v in neg.items()}
@@ -253,7 +293,14 @@ class JoystickGaitTracking(h1_base.H1Env):
     # r_pos = sum(pos.values())
     # r_neg = jp.exp(0.2 * sum(neg.values()))
     # reward = r_pos * r_neg * self.dt
-    reward = jp.clip(sum(rewards.values()) * self.dt, 0.0)
+    reward = sj.clip(
+        sum(rewards.values()) * self.dt,
+        0.0,
+        None,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+        gated=False,
+    )
 
     state.info["last_last_act"] = state.info["last_act"]
     state.info["last_act"] = action
@@ -261,9 +308,9 @@ class JoystickGaitTracking(h1_base.H1Env):
     phase_tp1 = state.info["phase"] + state.info["phase_dt"]
     state.info["phase"] = jp.fmod(phase_tp1 + jp.pi, 2 * jp.pi) - jp.pi
     state.info["rng"] = rng
-    state.info["feet_air_time"] *= ~contact
-    state.info["last_contact"] = contact
-    state.info["swing_peak"] *= ~contact
+    state.info["feet_air_time"] *= 1.0 - contact_reward
+    state.info["last_contact"] = contact_reward
+    state.info["swing_peak"] *= 1.0 - contact_reward
 
     state.info["command"] = jp.where(
         state.info["step"] > 500,
@@ -399,9 +446,14 @@ class JoystickGaitTracking(h1_base.H1Env):
     # Reward for tracking the desired foot height.
     foot_pos = data.site_xpos[self._feet_site_id]
     foot_z = foot_pos[..., -1]
-    rz = gait.get_rz(phase, swing_height=foot_height)
+    rz = gait.get_rz(
+        phase,
+        swing_height=foot_height,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
     error = jp.sum(jp.square(foot_z - rz))
-    return jp.exp(-error / 0.01)
+    return jp.exp(-sj.div(error, 0.01))
 
   def _reward_tracking_lin_vel(
       self,
@@ -410,7 +462,7 @@ class JoystickGaitTracking(h1_base.H1Env):
   ) -> jax.Array:
     # Tracking of linear velocity commands (xy axes).
     lin_vel_error = jp.sum(jp.square(commands[:2] - local_vel[:2]))
-    reward = jp.exp(-lin_vel_error / self._config.reward_config.tracking_sigma)
+    reward = jp.exp(-sj.div(lin_vel_error, self._config.reward_config.tracking_sigma))
     return reward
 
   def _reward_tracking_ang_vel(
@@ -420,15 +472,20 @@ class JoystickGaitTracking(h1_base.H1Env):
   ) -> jax.Array:
     # Tracking of angular velocity commands (yaw).
     ang_vel_error = jp.square(commands[2] - ang_vel[2])
-    return jp.exp(-ang_vel_error / self._config.reward_config.tracking_sigma)
+    return jp.exp(-sj.div(ang_vel_error, self._config.reward_config.tracking_sigma))
 
   def _reward_feet_air_time(
       self, air_time: jax.Array, first_contact: jax.Array, commands: jax.Array
   ) -> jax.Array:
     # Reward air time.
-    cmd_norm = jp.linalg.norm(commands[:2])
+    cmd_norm = sj.norm(commands[:2])
     rew_air_time = jp.sum((air_time - 0.1) * first_contact)
-    rew_air_time *= cmd_norm > 0.05  # No reward for zero commands.
+    rew_air_time *= sj.greater(
+        cmd_norm,
+        0.05,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )  # No reward for zero commands.
     return rew_air_time
 
   def _cost_pose(self, joint_angles: jax.Array) -> jax.Array:
@@ -439,7 +496,12 @@ class JoystickGaitTracking(h1_base.H1Env):
   def _cost_lin_vel_z(self, global_linvel, gait: jax.Array) -> jax.Array:  # pylint: disable=redefined-outer-name
     # Penalize z axis base linear velocity unless pronk or bound.
     cost = jp.square(global_linvel[2])
-    return cost * (gait > 0)
+    return cost * sj.greater(
+        gait,
+        0,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
 
   def _cost_ang_vel_xy(self, global_angvel) -> jax.Array:
     # Penalize xy axes base angular velocity.

@@ -22,8 +22,8 @@ from ml_collections import config_dict
 import mujoco
 from mujoco import mjx
 import numpy as np
-
 from mujoco_playground._src import mjx_env
+from mujoco_playground._src import softjax as sj
 from mujoco_playground._src.manipulation.aloha import aloha_constants as consts
 
 
@@ -107,7 +107,15 @@ class AlohaEnv(mjx_env.MjxEnv):
   def hand_table_collision(self, data) -> jp.ndarray:
     # Check for collisions with the floor.
     hand_table_collisions = [
-        data.sensordata[self._mj_model.sensor_adr[sensorid]] > 0
+        data.sensordata[self._mj_model.sensor_adr[sensorid]]
         for sensorid in self._table_finger_found_sensor
     ]
-    return (sum(hand_table_collisions) > 0).astype(float)
+    return sj.any(
+        sj.greater(
+            jp.array(hand_table_collisions),
+            0.0,
+            softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        ),
+        axis=-1,
+    )

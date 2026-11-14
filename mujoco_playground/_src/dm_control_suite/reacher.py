@@ -22,9 +22,9 @@ import jax.numpy as jp
 from ml_collections import config_dict
 import mujoco
 from mujoco import mjx
-
 from mujoco_playground._src import mjx_env
 from mujoco_playground._src import reward
+from mujoco_playground._src import softjax as sj
 from mujoco_playground._src.dm_control_suite import common
 
 _XML_PATH = mjx_env.ROOT_PATH / "dm_control_suite" / "xmls" / "reacher.xml"
@@ -39,7 +39,7 @@ def default_config() -> config_dict.ConfigDict:
       episode_length=1000,
       action_repeat=1,
       vision=False,
-      impl="warp",
+      impl="jax",
       naconmax=0,
       njmax=0,
   )
@@ -156,7 +156,12 @@ class Reacher(mjx_env.MjxEnv):
       metrics: dict[str, Any],
   ) -> jax.Array:
     del action, info, metrics  # Unused.
-    return reward.tolerance(self._finger_to_target_dist(data), (0, self._radii))
+    return reward.tolerance(
+        self._finger_to_target_dist(data),
+        (0, self._radii),
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )
 
   def _finger_to_target(self, data: mjx.Data) -> jax.Array:
     target_pos = data.geom_xpos[self._target_geom_id, :2]
@@ -164,7 +169,7 @@ class Reacher(mjx_env.MjxEnv):
     return target_pos - finger_pos
 
   def _finger_to_target_dist(self, data: mjx.Data) -> jax.Array:
-    return jp.linalg.norm(self._finger_to_target(data))
+    return sj.norm(self._finger_to_target(data))
 
   @property
   def xml_path(self) -> str:

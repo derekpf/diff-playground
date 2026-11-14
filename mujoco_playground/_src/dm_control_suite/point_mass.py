@@ -21,9 +21,9 @@ import jax.numpy as jp
 from ml_collections import config_dict
 import mujoco
 from mujoco import mjx
-
 from mujoco_playground._src import mjx_env
 from mujoco_playground._src import reward
+from mujoco_playground._src import softjax as sj
 from mujoco_playground._src.dm_control_suite import common
 
 _XML_PATH = mjx_env.ROOT_PATH / "dm_control_suite" / "xmls" / "point_mass.xml"
@@ -36,7 +36,7 @@ def default_config() -> config_dict.ConfigDict:
       episode_length=1000,
       action_repeat=1,
       vision=False,
-      impl="warp",
+      impl="jax",
       naconmax=0,
       njmax=5,
   )
@@ -122,7 +122,7 @@ class PointMass(mjx_env.MjxEnv):
   ) -> jax.Array:
     del info  # Unused.
 
-    mass_to_target_dist = jp.linalg.norm(
+    mass_to_target_dist = sj.norm(
         data.geom_xpos[self._target_geom_id]
         - data.geom_xpos[self._pointmass_geom_id]
     )
@@ -130,13 +130,20 @@ class PointMass(mjx_env.MjxEnv):
         mass_to_target_dist,
         bounds=(0, self._target_size),
         margin=self._target_size,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
     )
     metrics["reward/near_target"] = near_target
 
     control_reward = reward.tolerance(
-        action, margin=1, value_at_margin=0, sigmoid="quadratic"
+        action,
+        margin=1,
+        value_at_margin=0,
+        sigmoid="quadratic",
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
     ).mean()
-    small_control = (control_reward + 4) / 5
+    small_control = sj.div(control_reward + 4, 5)
     metrics["reward/small_control"] = small_control
 
     return near_target * small_control

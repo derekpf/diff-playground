@@ -23,8 +23,8 @@ from ml_collections import config_dict
 import mujoco
 from mujoco import mjx
 import numpy as np
-
 from mujoco_playground._src import mjx_env
+from mujoco_playground._src import softjax as sj
 
 _FEET_SITES = [
     "foot_front_left",
@@ -101,7 +101,7 @@ def default_config() -> config_dict.ConfigDict:
       # A duration will be sampled uniformly from this range at the beginning of
       # each episode.
       kick_wait_steps=[50, 150],
-      impl="warp",
+      impl="jax",
       naconmax=4 * 8192,
       njmax=12 + 4 * 4,
   )
@@ -150,6 +150,9 @@ class Joystick(mjx_env.MjxEnv):
 
     self._mj_model = mj_model
     self._mj_model.opt.timestep = config.sim_dt
+    # Menagerie's scene uses 1 solver iteration; 5 converges the contact solve
+    # (see README "Solver iterations").
+    self._mj_model.opt.iterations = 5
     self._mjx_model = mjx.put_model(self._mj_model, impl=self._config.impl)
     self._post_init()
 
@@ -223,7 +226,7 @@ class Joystick(mjx_env.MjxEnv):
         "last_act": jp.zeros(self.mjx_model.nu),
         "last_vel": jp.zeros(self.mjx_model.nv - 6),
         "command": self.sample_command(cmd_rng),
-        "last_contact": jp.zeros(len(_FEET_SITES), dtype=bool),
+        "last_contact": jp.zeros(len(_FEET_SITES), dtype=data.sensordata.dtype),
         "feet_air_time": jp.zeros(len(_FEET_SITES)),
         "kick_wait_steps": kick_wait_steps,
         "kick_duration_steps": kick_duration_steps,
@@ -254,40 +257,50 @@ class Joystick(mjx_env.MjxEnv):
     )
 
     obs = self._get_obs(data, state.info, state.obs, noise_rng)
-    joint_angles = data.qpos[7:]
     joint_vel = data.qvel[6:]
-    torso_z = data.xpos[self._torso_body_id, -1]
 
-    contact = jp.array([
+    contact_values = jp.array([
         data.sensordata[
             self._mj_model.sensor_adr[self._mj_model.sensor(sensor).id]
         ]
-        > 0
         for sensor in self._feet_floor_found_sensor
     ])
-    contact_filt = contact | state.info["last_contact"]
-    first_contact = (state.info["feet_air_time"] > 0.0) * contact_filt
+    contact = sj.greater(
+        contact_values, 0.0, softness=self.reward_softness, st_enable=self.reward_st_enable)
+    first_contact_reward = sj.logical_and(
+        sj.greater(
+            state.info["feet_air_time"],
+            0.0,
+            softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        ),
+        sj.logical_or(contact, state.info["last_contact"]),
+    )
     state.info["feet_air_time"] += self.dt
 
-    done = self._get_gravity(data)[-1] < 0
-    done |= jp.any(joint_angles < self._lowers)
-    done |= jp.any(joint_angles > self._uppers)
-    done |= torso_z < 0.18
+    done, soft_done = self._get_termination(data)
 
     rewards = self._get_reward(
-        data, action, state.info, state.metrics, done, first_contact
+        data, action, state.info, state.metrics, soft_done, first_contact_reward
     )
     rewards = {
         k: v * self._config.reward_config.scales[k] for k, v in rewards.items()
     }
-    reward = jp.clip(sum(rewards.values()) * self.dt, 0.0, 10000.0)
+    reward = sj.clip(
+        sum(rewards.values()) * self.dt,
+        0.0,
+        10000.0,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+        gated=False,
+    )
 
     # Bookkeeping.
     state.info["last_act"] = action
     state.info["last_vel"] = joint_vel
     state.info["step"] += 1
     state.info["rng"] = rng
-    state.info["feet_air_time"] *= ~contact
+    state.info["feet_air_time"] *= 1.0 - contact
     state.info["last_contact"] = contact
     state.info["command"] = jp.where(
         state.info["step"] > 500,
@@ -351,6 +364,31 @@ class Joystick(mjx_env.MjxEnv):
     sensor_dim = self._mj_model.sensor_dim[sensor_id]
     return data.sensordata[sensor_adr : sensor_adr + sensor_dim]
 
+  def _get_termination(
+      self, data: mjx.Data
+  ) -> tuple[jax.Array, jax.Array]:
+    joint_angles = data.qpos[7:]
+    torso_z = data.xpos[self._torso_body_id, -1]
+    gravity_z = self._get_gravity(data)[-1]
+
+    done = gravity_z < 0
+    done |= jp.any(joint_angles < self._lowers)
+    done |= jp.any(joint_angles > self._uppers)
+    done |= torso_z < 0.18
+
+    kw = dict(softness=self.reward_softness, st_enable=self.reward_st_enable)
+    soft_done = sj.logical_or(
+        sj.logical_or(
+            sj.less(gravity_z, 0.0, **kw),
+            sj.any(sj.less(joint_angles, self._lowers, **kw), axis=0),
+        ),
+        sj.logical_or(
+            sj.any(sj.greater(joint_angles, self._uppers, **kw), axis=0),
+            sj.less(torso_z, 0.18, **kw),
+        ),
+    )
+    return done, soft_done
+
   # Reward functions.
 
   def _get_reward(
@@ -391,7 +429,7 @@ class Joystick(mjx_env.MjxEnv):
   ) -> jax.Array:
     # Tracking of linear velocity commands (xy axes).
     lin_vel_error = jp.sum(jp.square(commands[:2] - local_vel[:2]))
-    return jp.exp(-lin_vel_error / self._config.reward_config.tracking_sigma)
+    return jp.exp(-sj.div(lin_vel_error, self._config.reward_config.tracking_sigma))
 
   def _reward_tracking_ang_vel(
       self,
@@ -400,7 +438,7 @@ class Joystick(mjx_env.MjxEnv):
   ) -> jax.Array:
     # Tracking of angular velocity commands (yaw).
     ang_vel_error = jp.square(commands[2] - ang_vel[2])
-    return jp.exp(-ang_vel_error / self._config.reward_config.tracking_sigma)
+    return jp.exp(-sj.div(ang_vel_error, self._config.reward_config.tracking_sigma))
 
   def _cost_lin_vel_z(self, global_linvel) -> jax.Array:
     # Penalize z axis base linear velocity.
@@ -416,7 +454,13 @@ class Joystick(mjx_env.MjxEnv):
 
   def _cost_torques(self, torques: jax.Array) -> jax.Array:
     # Penalize torques.
-    return jp.sqrt(jp.sum(jp.square(torques))) + jp.sum(jp.abs(torques))
+    return sj.norm(torques) + jp.sum(
+        sj.abs(
+            torques,
+            softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        )
+    )
 
   def _cost_action_rate(self, act: jax.Array, last_act: jax.Array) -> jax.Array:
     # Penalize changes in actions.
@@ -428,21 +472,43 @@ class Joystick(mjx_env.MjxEnv):
       joint_angles: jax.Array,
   ) -> jax.Array:
     # Penalize motion at zero commands.
-    unit_cmd = commands[:2] / jp.linalg.norm(commands[:2])
-    return jp.sum(jp.abs(joint_angles - self._default_pose)) * (
-        unit_cmd[1] < 0.1
+    unit_cmd = sj.div(commands[:2], sj.norm(commands[:2]))
+    return jp.sum(
+        sj.abs(
+            joint_angles - self._default_pose,
+            softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        )
+    ) * sj.less(
+        unit_cmd[1],
+        0.1,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
     )
 
   def _cost_termination(self, done: jax.Array, step: jax.Array) -> jax.Array:
-    return done & (step < 500)
+    return sj.logical_and(
+        done,
+        sj.less(
+            step,
+            500,
+            softness=self.reward_softness,
+            st_enable=self.reward_st_enable,
+        ),
+    )
 
   def _reward_feet_air_time(
       self, air_time: jax.Array, first_contact: jax.Array, commands: jax.Array
   ) -> jax.Array:
     # Reward air time.
-    cmd_norm = jp.linalg.norm(commands[:2])
+    cmd_norm = sj.norm(commands[:2])
     rew_air_time = jp.sum((air_time - 0.1) * first_contact)
-    rew_air_time *= cmd_norm > 0.05  # No reward for zero commands.
+    rew_air_time *= sj.greater(
+        cmd_norm,
+        0.05,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+    )  # No reward for zero commands.
     return rew_air_time
 
   def _maybe_apply_perturbation(
