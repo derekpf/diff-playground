@@ -183,7 +183,6 @@ class Swim(mjx_env.MjxEnv):
         bounds=(0, self._radii),
         margin=2 * self._radii,
         softness=self.reward_softness,
-        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
     metrics["reward/in_target"] = in_target

@@ -373,14 +373,14 @@ class Joystick(g1_base.G1Env):
     contact = sj.greater(
         contact_values,
         0.0,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
     first_contact_reward = sj.logical_and(
         sj.greater(
             state.info["feet_air_time"],
             0.0,
-            softness=self.bool_softness,
+            softness=self.reward_softness,
             st_enable=self.reward_st_enable,
         ),
         sj.logical_or(contact, state.info["last_contact"]),
@@ -664,7 +664,7 @@ class Joystick(g1_base.G1Env):
         sj.greater(
             c,
             0.0,
-            softness=self.bool_softness,
+            softness=self.reward_softness,
             st_enable=self.reward_st_enable,
         ),
         axis=-1,
@@ -681,7 +681,7 @@ class Joystick(g1_base.G1Env):
         sj.greater(
             cmd[1],
             0.1,
-            softness=self.bool_softness,
+            softness=self.reward_softness,
             st_enable=self.reward_st_enable,
         ),
         jp.array([0.0, 1.0, 0.0, 1.0]),
@@ -811,7 +811,7 @@ class Joystick(g1_base.G1Env):
     cost *= sj.less(
         cmd_norm,
         0.01,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
     return cost
@@ -891,7 +891,7 @@ class Joystick(g1_base.G1Env):
     rz = gait.get_rz(
         phase,
         swing_height=foot_height,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
     error = jp.sum(jp.square(foot_z - rz))
@@ -902,7 +902,7 @@ class Joystick(g1_base.G1Env):
         sj.greater(
             sj.norm(body_linvel),
             0.1,
-            softness=self.bool_softness,
+            softness=self.reward_softness,
             st_enable=self.reward_st_enable,
         ),
         sj.greater(
@@ -912,7 +912,7 @@ class Joystick(g1_base.G1Env):
                 st_enable=self.reward_st_enable,
             ),
             0.1,
-            softness=self.bool_softness,
+            softness=self.reward_softness,
             st_enable=self.reward_st_enable,
         ),
     )
@@ -921,7 +921,7 @@ class Joystick(g1_base.G1Env):
         sj.greater(
             sj.norm(command),
             0.01,
-            softness=self.bool_softness,
+            softness=self.reward_softness,
             st_enable=self.reward_st_enable,
         ),
     )

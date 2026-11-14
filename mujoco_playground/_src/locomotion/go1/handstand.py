@@ -382,7 +382,7 @@ class Handstand(go1_base.Go1Env):
         sj.greater(
             feet_contact,
             0.0,
-            softness=self.bool_softness,
+            softness=self.reward_softness,
             st_enable=self.reward_st_enable,
         ),
         axis=-1,

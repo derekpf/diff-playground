@@ -308,14 +308,14 @@ class Joystick(berkeley_humanoid_base.BerkeleyHumanoidEnv):
     contact = sj.greater(
         contact_values,
         0.0,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
     first_contact_reward = sj.logical_and(
         sj.greater(
             state.info["feet_air_time"],
             0.0,
-            softness=self.bool_softness,
+            softness=self.reward_softness,
             st_enable=self.reward_st_enable,
         ),
         sj.logical_or(contact, state.info["last_contact"]),
@@ -633,7 +633,7 @@ class Joystick(berkeley_humanoid_base.BerkeleyHumanoidEnv):
     ) * sj.less(
         cmd_norm,
         0.1,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
 
@@ -662,7 +662,7 @@ class Joystick(berkeley_humanoid_base.BerkeleyHumanoidEnv):
             st_enable=self.reward_st_enable,
         ),
         0.1,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
     return cost
@@ -736,7 +736,7 @@ class Joystick(berkeley_humanoid_base.BerkeleyHumanoidEnv):
     reward *= sj.greater(
         cmd_norm,
         0.1,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )  # No reward for zero commands.
     return reward
@@ -755,7 +755,7 @@ class Joystick(berkeley_humanoid_base.BerkeleyHumanoidEnv):
     rz = gait.get_rz(
         phase,
         swing_height=foot_height,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
     error = jp.sum(jp.square(foot_z - rz))

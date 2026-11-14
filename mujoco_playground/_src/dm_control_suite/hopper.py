@@ -151,7 +151,6 @@ class Hopper(mjx_env.MjxEnv):
         self._height(data),
         (_STAND_HEIGHT, 2),
         softness=self.reward_softness,
-        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
     metrics["reward/standing"] = standing
@@ -163,7 +162,6 @@ class Hopper(mjx_env.MjxEnv):
         value_at_margin=0.5,
         sigmoid="linear",
         softness=self.reward_softness,
-        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
     metrics["reward/hopping"] = hopping
@@ -183,7 +181,6 @@ class Hopper(mjx_env.MjxEnv):
         self._height(data),
         (_STAND_HEIGHT, 2),
         softness=self.reward_softness,
-        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
     metrics["reward/standing"] = standing
@@ -194,7 +191,6 @@ class Hopper(mjx_env.MjxEnv):
         value_at_margin=0,
         sigmoid="quadratic",
         softness=self.reward_softness,
-        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     ).mean()
     small_control = (small_control + 4) / 5

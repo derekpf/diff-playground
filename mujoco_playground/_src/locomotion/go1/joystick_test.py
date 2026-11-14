@@ -15,7 +15,7 @@ class ContactSurrogateTest(absltest.TestCase):
   def setUpClass(cls):
     super().setUpClass()
     cls.env = locomotion.load("Go1JoystickFlatTerrain")
-    cls.env.reward_softness = cls.env.bool_softness = 0.1
+    cls.env.reward_softness = 0.1
     cls.env.reward_st_enable = True
     cls.env._mjx_model = cls.env.mjx_model.replace(opt=cls.env.mjx_model.opt.replace(
         sensor_softness=0.1, sensor_st_enable=True))

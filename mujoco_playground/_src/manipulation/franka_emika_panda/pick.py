@@ -215,7 +215,7 @@ class PandaPickCube(panda.PandaBase):
         sj.greater(
             jp.array(hand_floor_collision),
             0.0,
-            softness=self.bool_softness,
+            softness=self.reward_softness,
             st_enable=self.reward_st_enable,
         ),
         axis=-1,
@@ -228,7 +228,7 @@ class PandaPickCube(panda.PandaBase):
             sj.less(
                 sj.norm(box_pos - gripper_pos),
                 0.012,
-                softness=self.bool_softness,
+                softness=self.reward_softness,
                 st_enable=self.reward_st_enable,
             ),
         ]),

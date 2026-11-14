@@ -371,7 +371,7 @@ class InplaceGaitTracking(h1_base.H1Env):
     rz = gait.get_rz(
         phase,
         swing_height=foot_height,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
     error = jp.sum(jp.square(foot_z - rz))

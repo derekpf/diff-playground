@@ -131,7 +131,6 @@ class PointMass(mjx_env.MjxEnv):
         bounds=(0, self._target_size),
         margin=self._target_size,
         softness=self.reward_softness,
-        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
     metrics["reward/near_target"] = near_target
@@ -142,7 +141,6 @@ class PointMass(mjx_env.MjxEnv):
         value_at_margin=0,
         sigmoid="quadratic",
         softness=self.reward_softness,
-        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     ).mean()
     small_control = sj.div(control_reward + 4, 5)

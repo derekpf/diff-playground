@@ -340,7 +340,7 @@ class Joystick(h1_base.H1Env):
     ) * sj.less(
         unit_cmd[1],
         0.1,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
 
@@ -350,7 +350,7 @@ class Joystick(h1_base.H1Env):
         sj.less(
             step,
             500,
-            softness=self.bool_softness,
+            softness=self.reward_softness,
             st_enable=self.reward_st_enable,
         ),
     )
@@ -372,7 +372,7 @@ class Joystick(h1_base.H1Env):
             sj.greater(
                 left_contact_values,
                 0.0,
-                softness=self.bool_softness,
+                softness=self.reward_softness,
                 st_enable=self.reward_st_enable,
             )
         ),
@@ -380,7 +380,7 @@ class Joystick(h1_base.H1Env):
             sj.greater(
                 right_contact_values,
                 0.0,
-                softness=self.bool_softness,
+                softness=self.reward_softness,
                 st_enable=self.reward_st_enable,
             )
         ),

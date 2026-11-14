@@ -114,7 +114,7 @@ class AlohaEnv(mjx_env.MjxEnv):
         sj.greater(
             jp.array(hand_table_collisions),
             0.0,
-            softness=self.bool_softness,
+            softness=self.reward_softness,
             st_enable=self.reward_st_enable,
         ),
         axis=-1,

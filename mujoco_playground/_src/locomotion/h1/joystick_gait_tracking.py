@@ -241,7 +241,7 @@ class JoystickGaitTracking(h1_base.H1Env):
             sj.greater(
                 left_contact_values,
                 0.0,
-                softness=self.bool_softness,
+                softness=self.reward_softness,
                 st_enable=self.reward_st_enable,
             )
         ),
@@ -249,7 +249,7 @@ class JoystickGaitTracking(h1_base.H1Env):
             sj.greater(
                 right_contact_values,
                 0.0,
-                softness=self.bool_softness,
+                softness=self.reward_softness,
                 st_enable=self.reward_st_enable,
             )
         ),
@@ -258,7 +258,7 @@ class JoystickGaitTracking(h1_base.H1Env):
         sj.greater(
             state.info["feet_air_time"],
             0.0,
-            softness=self.bool_softness,
+            softness=self.reward_softness,
             st_enable=self.reward_st_enable,
         ),
         sj.logical_or(contact_reward, state.info["last_contact"]),
@@ -446,7 +446,7 @@ class JoystickGaitTracking(h1_base.H1Env):
     rz = gait.get_rz(
         phase,
         swing_height=foot_height,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
     error = jp.sum(jp.square(foot_z - rz))
@@ -480,7 +480,7 @@ class JoystickGaitTracking(h1_base.H1Env):
     rew_air_time *= sj.greater(
         cmd_norm,
         0.05,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )  # No reward for zero commands.
     return rew_air_time
@@ -496,7 +496,7 @@ class JoystickGaitTracking(h1_base.H1Env):
     return cost * sj.greater(
         gait,
         0,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
 

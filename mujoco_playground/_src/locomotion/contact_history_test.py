@@ -17,7 +17,6 @@ class ContactHistoryTest(parameterized.TestCase):
   def _setup_env(self, name):
     self.env = locomotion.load(name)
     self.env.reward_softness = 0.05
-    self.env.bool_softness = 0.1
     self.env.reward_st_enable = True
     self.env._mjx_model = self.env.mjx_model.replace(
         opt=self.env.mjx_model.opt.replace(

@@ -59,14 +59,6 @@ class Wrapper(mjx_env.MjxEnv):
     self.env.reward_softness = value
 
   @property
-  def bool_softness(self) -> float:
-    return self.env.bool_softness
-
-  @bool_softness.setter
-  def bool_softness(self, value: float) -> None:
-    self.env.bool_softness = value
-
-  @property
   def reward_st_enable(self) -> bool:
     return self.env.reward_st_enable
 

@@ -265,12 +265,12 @@ class Joystick(mjx_env.MjxEnv):
         for sensor in self._feet_floor_found_sensor
     ])
     contact = sj.greater(
-        contact_values, 0.0, softness=self.bool_softness, st_enable=self.reward_st_enable)
+        contact_values, 0.0, softness=self.reward_softness, st_enable=self.reward_st_enable)
     first_contact_reward = sj.logical_and(
         sj.greater(
             state.info["feet_air_time"],
             0.0,
-            softness=self.bool_softness,
+            softness=self.reward_softness,
             st_enable=self.reward_st_enable,
         ),
         sj.logical_or(contact, state.info["last_contact"]),
@@ -458,7 +458,7 @@ class Joystick(mjx_env.MjxEnv):
     ) * sj.less(
         unit_cmd[1],
         0.1,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
 
@@ -468,7 +468,7 @@ class Joystick(mjx_env.MjxEnv):
         sj.less(
             step,
             500,
-            softness=self.bool_softness,
+            softness=self.reward_softness,
             st_enable=self.reward_st_enable,
         ),
     )
@@ -482,7 +482,7 @@ class Joystick(mjx_env.MjxEnv):
     rew_air_time *= sj.greater(
         cmd_norm,
         0.05,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )  # No reward for zero commands.
     return rew_air_time

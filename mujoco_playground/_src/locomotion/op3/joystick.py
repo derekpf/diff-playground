@@ -392,7 +392,7 @@ class Joystick(op3_base.Op3Env):
     return penalty * sj.less(
         cmd_norm,
         0.1,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
     # penalty = jp.sum(jp.square(global_linvel[:2]))
@@ -409,7 +409,7 @@ class Joystick(op3_base.Op3Env):
         sj.less(
             step,
             500,
-            softness=self.bool_softness,
+            softness=self.reward_softness,
             st_enable=self.reward_st_enable,
         ),
     )
@@ -432,7 +432,7 @@ class Joystick(op3_base.Op3Env):
             sj.greater(
                 left_contact_values,
                 0.0,
-                softness=self.bool_softness,
+                softness=self.reward_softness,
                 st_enable=self.reward_st_enable,
             )
         ),
@@ -440,7 +440,7 @@ class Joystick(op3_base.Op3Env):
             sj.greater(
                 right_contact_values,
                 0.0,
-                softness=self.bool_softness,
+                softness=self.reward_softness,
                 st_enable=self.reward_st_enable,
             )
         ),

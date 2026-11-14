@@ -402,7 +402,7 @@ class Joystick(base.ApolloEnv):
         sj.greater(
             c,
             0.0,
-            softness=self.bool_softness,
+            softness=self.reward_softness,
             st_enable=self.reward_st_enable,
         ),
         axis=-1,
@@ -414,7 +414,7 @@ class Joystick(base.ApolloEnv):
         sj.less(
             sj.norm(commands),
             0.01,
-            softness=self.bool_softness,
+            softness=self.reward_softness,
             st_enable=self.reward_st_enable,
         ),
         jp.ones_like(self._weights),
@@ -430,7 +430,7 @@ class Joystick(base.ApolloEnv):
         sj.greater(
             lateral_cmd,
             0.3,
-            softness=self.bool_softness,
+            softness=self.reward_softness,
             st_enable=self.reward_st_enable,
         ),
         0.01,
@@ -445,7 +445,7 @@ class Joystick(base.ApolloEnv):
     rz = gait.get_rz(
         phase,
         swing_height=self._config.reward_config.max_foot_height,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
     error = jp.sum(jp.square(foot_z - rz))

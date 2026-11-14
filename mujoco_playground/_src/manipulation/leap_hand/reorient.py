@@ -254,7 +254,7 @@ class CubeReorient(leap_hand_base.LeapHandEnv):
     success_reward = sj.less(
         ori_error,
         self._config.success_threshold,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
     reward += success_reward * self._config.reward_config.success_reward
@@ -401,7 +401,6 @@ class CubeReorient(leap_hand_base.LeapHandEnv):
         margin=0.05,
         sigmoid="linear",
         softness=self.reward_softness,
-        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
 
@@ -460,7 +459,6 @@ class CubeReorient(leap_hand_base.LeapHandEnv):
         margin=jp.pi,
         sigmoid="linear",
         softness=self.reward_softness,
-        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
 

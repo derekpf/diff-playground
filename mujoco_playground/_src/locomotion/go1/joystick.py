@@ -262,7 +262,7 @@ class Joystick(go1_base.Go1Env):
         for sensorid in self._feet_floor_found_sensor
     ])
     contact = sj.greater(
-        contact_values, 0., softness=self.bool_softness,
+        contact_values, 0., softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
 
@@ -270,7 +270,7 @@ class Joystick(go1_base.Go1Env):
         sj.greater(
             state.info["feet_air_time"],
             0.0,
-            softness=self.bool_softness,
+            softness=self.reward_softness,
             st_enable=self.reward_st_enable,
         ),
         sj.logical_or(contact, state.info["last_contact"]),
@@ -337,7 +337,7 @@ class Joystick(go1_base.Go1Env):
     soft_done = sj.less(
         upvector_z,
         0.0,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
     return done, soft_done
@@ -563,7 +563,7 @@ class Joystick(go1_base.Go1Env):
     less = sj.less(
         cmd_norm,
         0.01,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
     return less * jp.sum(
@@ -604,7 +604,7 @@ class Joystick(go1_base.Go1Env):
     greater = sj.greater(
         cmd_norm,
         0.01,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
     return jp.sum(vel_xy_norm_sq * contact) * greater
@@ -636,7 +636,7 @@ class Joystick(go1_base.Go1Env):
     greater = sj.greater(
         cmd_norm,
         0.01,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
     return jp.sum(jp.square(error) * first_contact) * greater
@@ -650,7 +650,7 @@ class Joystick(go1_base.Go1Env):
     greater = sj.greater(
         cmd_norm,
         0.01,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )  # No reward for zero commands.
     return rew_air_time * greater

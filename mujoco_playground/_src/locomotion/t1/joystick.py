@@ -352,7 +352,7 @@ class Joystick(t1_base.T1Env):
             sj.greater(
                 left_contact_values,
                 0.0,
-                softness=self.bool_softness,
+                softness=self.reward_softness,
                 st_enable=self.reward_st_enable,
             )
         ),
@@ -360,7 +360,7 @@ class Joystick(t1_base.T1Env):
             sj.greater(
                 right_contact_values,
                 0.0,
-                softness=self.bool_softness,
+                softness=self.reward_softness,
                 st_enable=self.reward_st_enable,
             )
         ),
@@ -369,7 +369,7 @@ class Joystick(t1_base.T1Env):
         sj.greater(
             state.info["feet_air_time"],
             0.0,
-            softness=self.bool_softness,
+            softness=self.reward_softness,
             st_enable=self.reward_st_enable,
         ),
         sj.logical_or(contact_reward, state.info["last_contact"]),
@@ -703,7 +703,7 @@ class Joystick(t1_base.T1Env):
     ) * sj.less(
         cmd_norm,
         0.1,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
 
@@ -720,7 +720,7 @@ class Joystick(t1_base.T1Env):
     return sj.greater(
         collision_value,
         0.0,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
 
@@ -743,7 +743,7 @@ class Joystick(t1_base.T1Env):
             st_enable=self.reward_st_enable,
         ),
         0.1,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
     return cost
@@ -816,7 +816,7 @@ class Joystick(t1_base.T1Env):
     reward *= sj.greater(
         cmd_norm,
         0.1,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )  # No reward for zero commands.
     return reward
@@ -835,7 +835,7 @@ class Joystick(t1_base.T1Env):
     rz = gait.get_rz(
         phase,
         swing_height=foot_height,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
     error = jp.sum(jp.square(foot_z - rz))

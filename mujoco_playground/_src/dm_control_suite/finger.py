@@ -153,7 +153,7 @@ class Spin(mjx_env.MjxEnv):
     return sj.less_equal(
         self._hinge_velocity(data),
         -_SPIN_VELOCITY,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
 
@@ -309,7 +309,7 @@ class Turn(mjx_env.MjxEnv):
     return sj.less_equal(
         self._dist_to_target(data),
         0.0,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
 

@@ -116,13 +116,13 @@ class TestSuite(parameterized.TestCase):
       h1_joystick.Joystick._cost_termination,
       op3_joystick.Joystick._cost_termination,
   )
-  def test_termination_cost_uses_boolean_softness(self, cost_fn) -> None:
-    env = SimpleNamespace(bool_softness=0.0, reward_st_enable=False)
+  def test_termination_cost_uses_reward_softness(self, cost_fn) -> None:
+    env = SimpleNamespace(reward_softness=0.0, reward_st_enable=False)
     cost = lambda step: cost_fn(env, jp.array(True), step)
 
     np.testing.assert_allclose(cost(jp.array(499.0)), 1.0)
     np.testing.assert_allclose(cost(jp.array(500.0)), 0.0)
-    env.bool_softness = 0.1
+    env.reward_softness = 0.1
     self.assertGreater(float(cost(jp.array(500.0))), 0.0)
 
     env.reward_st_enable = True

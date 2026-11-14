@@ -201,7 +201,7 @@ class PandaOpenCabinet(panda.PandaBase):
         sj.greater(
             jp.array(hand_barrier_collision),
             0.0,
-            softness=self.bool_softness,
+            softness=self.reward_softness,
             st_enable=self.reward_st_enable,
         ),
         axis=-1,
@@ -214,7 +214,7 @@ class PandaOpenCabinet(panda.PandaBase):
             sj.less(
                 sj.norm(box_pos - gripper_pos),
                 1.0 * 0.012,
-                softness=self.bool_softness,
+                softness=self.reward_softness,
                 st_enable=self.reward_st_enable,
             ),
         ]),

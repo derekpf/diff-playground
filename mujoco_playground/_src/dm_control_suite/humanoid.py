@@ -145,7 +145,6 @@ class Humanoid(mjx_env.MjxEnv):
         bounds=(_STAND_HEIGHT, float("inf")),
         margin=sj.div(_STAND_HEIGHT, 4),
         softness=self.reward_softness,
-        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
     metrics["reward/standing"] = standing
@@ -157,7 +156,6 @@ class Humanoid(mjx_env.MjxEnv):
         margin=1.9,
         value_at_margin=0,
         softness=self.reward_softness,
-        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
     metrics["reward/upright"] = upright
@@ -171,7 +169,6 @@ class Humanoid(mjx_env.MjxEnv):
         value_at_margin=0,
         sigmoid="quadratic",
         softness=self.reward_softness,
-        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     ).mean()
     small_control = sj.div(4 + small_control, 5)
@@ -188,7 +185,6 @@ class Humanoid(mjx_env.MjxEnv):
         horizontal_velocity,
         margin=2,
         softness=self.reward_softness,
-        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     ).mean()
     return dont_move
@@ -201,7 +197,6 @@ class Humanoid(mjx_env.MjxEnv):
         value_at_margin=0,
         sigmoid="linear",
         softness=self.reward_softness,
-        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
     move = sj.div(5 * move + 1, 6)

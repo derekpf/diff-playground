@@ -254,7 +254,6 @@ class Balance(mjx_env.MjxEnv):
         cart_position,
         margin=2,
         softness=self.reward_softness,
-        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
     centered = (1 + centered) / 2
@@ -265,7 +264,6 @@ class Balance(mjx_env.MjxEnv):
         value_at_margin=0,
         sigmoid="quadratic",
         softness=self.reward_softness,
-        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
     small_control = (4 + small_control) / 5
@@ -276,7 +274,6 @@ class Balance(mjx_env.MjxEnv):
             angular_vel,
             margin=5,
             softness=self.reward_softness,
-            bool_softness=self.bool_softness,
             st_enable=self.reward_st_enable,
         ),
         softness=self.reward_softness,
@@ -352,7 +349,6 @@ class Balance(mjx_env.MjxEnv):
         cart_position,
         self._CART_RANGE,
         softness=self.reward_softness,
-        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
     metrics["reward/cart_in_bounds"] = cart_in_bounds
@@ -362,7 +358,6 @@ class Balance(mjx_env.MjxEnv):
         pole_angle_cos,
         self._ANGLE_COSINE_RANGE,
         softness=self.reward_softness,
-        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
     metrics["reward/angle_in_bounds"] = angle_in_bounds

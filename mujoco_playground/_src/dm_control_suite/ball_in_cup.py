@@ -120,7 +120,7 @@ class BallInCup(mjx_env.MjxEnv):
     inside = sj.less(
         ball_to_target,
         self._target_size - self._ball_size,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
     return sj.all(inside, axis=-1)

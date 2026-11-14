@@ -126,7 +126,6 @@ class Balance(mjx_env.MjxEnv):
         bounds=(0.0, self._target_radius),
         margin=self._margin,
         softness=self.reward_softness,
-        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
 

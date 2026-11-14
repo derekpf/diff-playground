@@ -404,7 +404,7 @@ class PandaRobotiqPushCube(panda_robotiq.PandaRobotiqBase):
         * sj.greater(
             sj.norm(side_dir),
             1e-3,
-            softness=self.bool_softness,
+            softness=self.reward_softness,
             st_enable=self.reward_st_enable,
         )
     )
@@ -417,7 +417,6 @@ class PandaRobotiqPushCube(panda_robotiq.PandaRobotiqBase):
         margin=1.0,
         sigmoid="linear",
         softness=self.reward_softness,
-        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
 
@@ -427,7 +426,6 @@ class PandaRobotiqPushCube(panda_robotiq.PandaRobotiqBase):
         margin=0.4,
         sigmoid="reciprocal",
         softness=self.reward_softness,
-        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
 
@@ -439,7 +437,6 @@ class PandaRobotiqPushCube(panda_robotiq.PandaRobotiqBase):
         margin=jp.pi,
         sigmoid="reciprocal",
         softness=self.reward_softness,
-        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
 
@@ -464,7 +461,6 @@ class PandaRobotiqPushCube(panda_robotiq.PandaRobotiqBase):
         margin=4.5,
         sigmoid="linear",
         softness=self.reward_softness,
-        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
     joint_vel_mse = sj.norm(
@@ -476,7 +472,6 @@ class PandaRobotiqPushCube(panda_robotiq.PandaRobotiqBase):
         margin=2.0,
         sigmoid="reciprocal",
         softness=self.reward_softness,
-        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
     total_command = sj.norm(action)
@@ -487,13 +482,13 @@ class PandaRobotiqPushCube(panda_robotiq.PandaRobotiqBase):
             sj.greater(
                 data.qvel[self._robot_arm_qposadr],
                 self._jnt_vel_range[:, 1] * self._joint_vel_limit_percentage,
-                softness=self.bool_softness,
+                softness=self.reward_softness,
                 st_enable=self.reward_st_enable,
             ),
             sj.less(
                 data.qvel[self._robot_arm_qposadr],
                 self._jnt_vel_range[:, 0] * self._joint_vel_limit_percentage,
-                softness=self.bool_softness,
+                softness=self.reward_softness,
                 st_enable=self.reward_st_enable,
             ),
         ),
@@ -537,13 +532,13 @@ class PandaRobotiqPushCube(panda_robotiq.PandaRobotiqBase):
     position_success = sj.less(
         sj.norm(target_pos - box_pos),
         0.03,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
     orientation_success = sj.less(
         self._orientation_error(box_quat, target_quat),
         10 / 180 * jp.pi,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
     sub_success = sj.logical_and(position_success, orientation_success)
@@ -552,7 +547,7 @@ class PandaRobotiqPushCube(panda_robotiq.PandaRobotiqBase):
         sj.greater_equal(
             state.info["success_step_count"],
             self._config.reward_config.success_step_count,
-            softness=self.bool_softness,
+            softness=self.reward_softness,
             st_enable=self.reward_st_enable,
         ),
     )

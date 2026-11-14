@@ -215,7 +215,6 @@ class Swim(mjx_env.MjxEnv):
         margin=5 * self._target_size,
         sigmoid="long_tail",
         softness=self.reward_softness,
-        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
 

@@ -258,7 +258,7 @@ class Getup(spot_base.SpotEnv):
     return sj.less(
         ori_error,
         ori_tol,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
 
@@ -275,7 +275,7 @@ class Getup(spot_base.SpotEnv):
     return sj.less(
         height_error,
         pos_tol,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
 

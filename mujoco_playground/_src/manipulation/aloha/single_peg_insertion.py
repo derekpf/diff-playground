@@ -146,7 +146,7 @@ class SinglePegInsertion(aloha_base.AlohaEnv):
         use_peg_insertion_reward=sj.less(
             peg_end2_dist_to_line,
             0.005,
-            softness=self.bool_softness,
+            softness=self.reward_softness,
             st_enable=self.reward_st_enable,
         ),
     )
@@ -206,7 +206,6 @@ class SinglePegInsertion(aloha_base.AlohaEnv):
         margin=0.3,
         sigmoid="linear",
         softness=self.reward_softness,
-        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
     right_peg_dist = sj.norm(
@@ -218,7 +217,6 @@ class SinglePegInsertion(aloha_base.AlohaEnv):
         margin=0.3,
         sigmoid="linear",
         softness=self.reward_softness,
-        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
 
@@ -229,7 +227,6 @@ class SinglePegInsertion(aloha_base.AlohaEnv):
         (0, 0.01),
         margin=2.0,
         softness=self.reward_softness,
-        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
     right_pose = sj.norm(robot_qpos_diff[6:])
@@ -238,7 +235,6 @@ class SinglePegInsertion(aloha_base.AlohaEnv):
         (0, 0.01),
         margin=2.0,
         softness=self.reward_softness,
-        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
 
@@ -251,7 +247,6 @@ class SinglePegInsertion(aloha_base.AlohaEnv):
         margin=0.15,
         sigmoid="linear",
         softness=self.reward_softness,
-        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
 
@@ -264,7 +259,6 @@ class SinglePegInsertion(aloha_base.AlohaEnv):
         margin=0.15,
         sigmoid="linear",
         softness=self.reward_softness,
-        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
 
@@ -279,7 +273,6 @@ class SinglePegInsertion(aloha_base.AlohaEnv):
         margin=0.03,
         sigmoid="linear",
         softness=self.reward_softness,
-        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
     peg_orientation = jp.dot(
@@ -291,7 +284,6 @@ class SinglePegInsertion(aloha_base.AlohaEnv):
         margin=0.03,
         sigmoid="linear",
         softness=self.reward_softness,
-        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
 
@@ -306,7 +298,6 @@ class SinglePegInsertion(aloha_base.AlohaEnv):
             margin=0.1,
             sigmoid="linear",
             softness=self.reward_softness,
-            bool_softness=self.bool_softness,
             st_enable=self.reward_st_enable,
         )
         * use_peg_insertion_reward

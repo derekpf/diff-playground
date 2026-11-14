@@ -208,7 +208,7 @@ class HandOver(aloha_base.AlohaEnv):
         sj.less(
             box_pos[2],
             0.05,
-            softness=self.bool_softness,
+            softness=self.reward_softness,
             st_enable=self.reward_st_enable,
         ),
         state.info['episode_picked'],
@@ -250,13 +250,13 @@ class HandOver(aloha_base.AlohaEnv):
     pre = sj.less(
         box[0],
         self._left_thresh,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
     past = sj.greater_equal(
         box[0],
         self._right_thresh,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
     btwn = (1 - pre) * (1 - past)

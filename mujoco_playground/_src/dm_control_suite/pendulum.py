@@ -123,7 +123,6 @@ class SwingUp(mjx_env.MjxEnv):
         self._pole_vertical(data),
         (_COSINE_BOUND, 1),
         softness=self.reward_softness,
-        bool_softness=self.bool_softness,
         st_enable=self.reward_st_enable,
     )
 

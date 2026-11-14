@@ -338,7 +338,7 @@ class Getup(go1_base.Go1Env):
     return sj.less(
         ori_error,
         ori_tol,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
 
@@ -356,7 +356,7 @@ class Getup(go1_base.Go1Env):
     return sj.less(
         height_error,
         pos_tol,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
 

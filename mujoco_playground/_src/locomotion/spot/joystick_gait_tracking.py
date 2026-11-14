@@ -344,7 +344,7 @@ class JoystickGaitTracking(spot_base.SpotEnv):
     rz = gait.get_rz(
         phase,
         swing_height=foot_height,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
     error = jp.sum(jp.square(foot_z - rz))
@@ -379,7 +379,7 @@ class JoystickGaitTracking(spot_base.SpotEnv):
     return cost * sj.greater(
         gait,
         2,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
 

@@ -319,7 +319,7 @@ class PandaPickCubeCartesian(pick.PandaPickCube):
     raw_rewards['no_box_collision'] = sj.less_equal(
         hand_box_value,
         0.0,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
     rewards = {
@@ -348,7 +348,7 @@ class PandaPickCubeCartesian(pick.PandaPickCube):
         sj.greater(
             box_pos[2],
             0.05,
-            softness=self.bool_softness,
+            softness=self.reward_softness,
             st_enable=self.reward_st_enable,
         )
         * self._config.reward_config.lifted_reward
@@ -441,7 +441,7 @@ class PandaPickCubeCartesian(pick.PandaPickCube):
     return sj.less(
         sj.norm(box_pos - target_pos),
         self._config.success_threshold,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
 

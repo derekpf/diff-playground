@@ -36,13 +36,13 @@ _SIGMOIDS = (
 
 class RewardTest(parameterized.TestCase):
 
-  def test_tolerance_uses_independent_boolean_softness(self):
+  def test_tolerance_uses_reward_softness_for_comparisons(self):
     x = jp.array(-0.01)
     hard = reward.tolerance(
-        x, bounds=(0.0, 1.0), softness=0.1, bool_softness=0.0
+        x, bounds=(0.0, 1.0), softness=0.0
     )
     soft = reward.tolerance(
-        x, bounds=(0.0, 1.0), softness=0.1, bool_softness=0.1
+        x, bounds=(0.0, 1.0), softness=0.1
     )
     self.assertEqual(float(hard), 0.0)
     self.assertGreater(float(soft), 0.0)
@@ -51,7 +51,7 @@ class RewardTest(parameterized.TestCase):
     fn = lambda x: reward.tolerance(
         x,
         bounds=(0.0, 1.0),
-        bool_softness=0.1,
+        softness=0.1,
         st_enable=True,
     )
     self.assertEqual(float(fn(-0.01)), 0.0)

@@ -240,14 +240,14 @@ class Joystick(spot_base.SpotEnv):
     contact = sj.greater(
         contact_values,
         0.0,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
     first_contact_reward = sj.logical_and(
         sj.greater(
             state.info["feet_air_time"],
             0.0,
-            softness=self.bool_softness,
+            softness=self.reward_softness,
             st_enable=self.reward_st_enable,
         ),
         sj.logical_or(contact, state.info["last_contact"]),
@@ -464,7 +464,7 @@ class Joystick(spot_base.SpotEnv):
         sj.less(
             cmd_norm,
             0.01,
-            softness=self.bool_softness,
+            softness=self.reward_softness,
             st_enable=self.reward_st_enable,
         ),
         -10.0,
@@ -581,7 +581,7 @@ class Joystick(spot_base.SpotEnv):
     cost *= sj.greater_equal(
         cmd_norm,
         0.01,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )  # No penalty for zero commands.
     return cost
@@ -595,7 +595,7 @@ class Joystick(spot_base.SpotEnv):
     rew_air_time *= sj.greater_equal(
         cmd_norm,
         0.01,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )  # No reward for zero commands.
     return rew_air_time
@@ -606,7 +606,7 @@ class Joystick(spot_base.SpotEnv):
     rz = gait.get_rz(
         phase,
         swing_height=self._config.reward_config.max_foot_height,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
     return jp.sum(jp.square(foot_z - rz))

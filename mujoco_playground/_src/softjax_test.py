@@ -63,7 +63,7 @@ class _SoftnessEnv(MjxEnv):
     return sj.greater(
         value,
         0.0,
-        softness=self.bool_softness,
+        softness=self.reward_softness,
         st_enable=self.reward_st_enable,
     )
 
@@ -74,7 +74,6 @@ class SoftjaxTest(absltest.TestCase):
     self.assertNotIn("reward_softness", MjxEnv.__dict__)
     env = _SoftnessEnv()
     self.assertEqual(env.reward_softness, 0.0)
-    self.assertEqual(env.bool_softness, 0.0)
     self.assertFalse(env.reward_st_enable)
 
   def test_reward_softness_is_instance_scoped(self):
@@ -101,16 +100,16 @@ class SoftjaxTest(absltest.TestCase):
         wrapped.reward(0.0), 0.1 * np.log(2.0), rtol=1e-5
     )
 
-  def test_boolean_softness_and_st_mode_are_instance_scoped(self):
+  def test_reward_softness_and_st_mode_are_instance_scoped(self):
     first = _SoftnessEnv()
     second = _SoftnessEnv()
     wrapped = wrapper.Wrapper(first)
-    wrapped.bool_softness = 0.1
+    wrapped.reward_softness = 0.1
     wrapped.reward_st_enable = True
 
-    self.assertEqual(first.bool_softness, 0.1)
+    self.assertEqual(first.reward_softness, 0.1)
     self.assertTrue(first.reward_st_enable)
-    self.assertEqual(second.bool_softness, 0.0)
+    self.assertEqual(second.reward_softness, 0.0)
     self.assertFalse(second.reward_st_enable)
     self.assertEqual(float(wrapped.comparison_reward(-0.01)), 0.0)
     self.assertGreater(float(jax.grad(wrapped.comparison_reward)(-0.01)), 0.0)
