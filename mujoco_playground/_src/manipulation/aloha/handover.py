@@ -214,6 +214,8 @@ class HandOver(aloha_base.AlohaEnv):
         state.info['episode_picked'],
     )
     reward += dropped_reward * -0.1  # Small penalty.
+    # Episodes still end on the hard drop condition.
+    dropped = (box_pos[2] < 0.05) & state.info['episode_picked']
 
     out_of_bounds = jp.any(jp.abs(box_pos) > 1.0)
     out_of_bounds |= box_pos[2] < 0.0
