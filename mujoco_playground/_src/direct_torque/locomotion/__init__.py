@@ -1,1 +1,0 @@
-"""Direct-torque locomotion environments."""
