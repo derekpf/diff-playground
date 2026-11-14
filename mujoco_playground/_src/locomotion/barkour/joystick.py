@@ -150,6 +150,9 @@ class Joystick(mjx_env.MjxEnv):
 
     self._mj_model = mj_model
     self._mj_model.opt.timestep = config.sim_dt
+    # Menagerie's scene uses 1 solver iteration; 5 converges the contact solve
+    # (see README "Solver iterations").
+    self._mj_model.opt.iterations = 5
     self._mjx_model = mjx.put_model(self._mj_model, impl=self._config.impl)
     self._post_init()
 

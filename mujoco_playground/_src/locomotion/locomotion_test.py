@@ -54,20 +54,27 @@ class TestSuite(parameterized.TestCase):
     action = jp.zeros(env.action_size)
     step = jax.jit(env.step)
 
-    state = step(state, action)
-    state = step(state, action)
+    # Step until some feet are airborne and others are planted, so the contact
+    # mask actually selects which foot velocities enter the slip cost. The
+    # exact step depends on the solver settings, so search instead of fixing it.
+    for _ in range(10):
+      state = step(state, action)
+      contact_values = np.asarray(
+          jp.array([
+              state.data.sensordata[env._mj_model.sensor_adr[sensorid]]
+              for sensorid in env._feet_floor_found_sensor
+          ])
+      )
+      contact = contact_values > 0.0
+      if np.any(contact) and not np.all(contact):
+        break
+    else:
+      self.fail(f"No mixed foot contact within 10 steps: {contact_values}")
 
-    contact_values = np.asarray(
-        jp.array([
-            state.data.sensordata[env._mj_model.sensor_adr[sensorid]]
-            for sensorid in env._feet_floor_found_sensor
-        ])
-    )
-    self.assertTrue(np.any(contact_values == 0.0))
-
-    contact = contact_values > 0.0
     feet_vel = np.asarray(state.data.sensordata[env._foot_linvel_sensor_adr])
     vel_xy_norm_sq = np.sum(np.square(feet_vel[..., :2]), axis=-1)
+    # An airborne foot must be moving, or a soft mask would go unnoticed.
+    self.assertGreater(float(np.max(vel_xy_norm_sq[~contact])), 1e-3)
     expected = (
         np.sum(vel_xy_norm_sq * contact)
         * float(env._config.reward_config.scales.feet_slip)

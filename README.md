@@ -70,6 +70,33 @@ boundary; gated ReLU at `x=-2*softness` has derivative `-0.091`. Product-based
 or all-on boundary; geometric-mean reduction divides that sensitivity by the
 number of inputs. These defaults therefore stay unchanged.
 
+## Solver iterations
+
+Locomotion envs raise the constraint solver's Newton iterations above
+upstream MuJoCo Playground: envs that used 1 iteration (Go1, Spot, H1,
+Op3, Barkour) now use 5, and envs that used 3 (G1, T1, Berkeley Humanoid,
+Apollo) now use 10. Line-search iterations stay at 5.
+
+With a single iteration the contact solve is far from converged, and its
+result jumps under tiny input changes. Over a BPTT window the forward
+trajectory is then effectively discontinuous, so first-order (FO)
+gradients carry no signal beyond about 8 control steps. On Go1Handstand,
+at a trained policy's states, the median cosine between BPTT and
+zeroth-order (ZO) gradients over a 32-step window rose from about 0.004
+at 1 iteration to about 0.11 at 4–10 iterations (16 steps: 0.07 to 0.38),
+and BPTT steps then improved the objective about as much as ZO steps.
+Measured on Go1Handstand states, the solver needs a median of 5 Newton
+iterations and at most 10; extra line-search iterations do not change this.
+
+This changes forward physics relative to upstream, so compare against
+upstream results with care. PPO gradients do not pass through the solver,
+so PPO baselines should use the same setting for like-for-like
+comparisons.
+
+TODO: run FO-vs-ZO cosine checks for the 10-iteration envs (G1, T1,
+Berkeley Humanoid, Apollo). Their iteration count was raised from 3 to 10
+without measuring convergence or gradient quality on those models.
+
 Features include:
 
 - Classic control environments from `dm_control`.
