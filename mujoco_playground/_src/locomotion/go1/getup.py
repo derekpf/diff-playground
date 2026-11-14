@@ -421,14 +421,18 @@ class Getup(go1_base.Go1Env):
     return c1 + c2
 
   def _cost_joint_pos_limits(self, qpos: jax.Array) -> jax.Array:
-    out_of_limits = sj.relu(
-        self._soft_lowers - qpos,
+    out_of_limits = -sj.clip(
+        qpos - self._soft_lowers,
+        None,
+        0.0,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
         gated=False,
     )
-    out_of_limits += sj.relu(
+    out_of_limits += sj.clip(
         qpos - self._soft_uppers,
+        0.0,
+        None,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
         gated=False,

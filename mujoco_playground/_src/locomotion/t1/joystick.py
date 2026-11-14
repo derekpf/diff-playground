@@ -691,14 +691,18 @@ class Joystick(t1_base.T1Env):
   # Other rewards.
 
   def _cost_joint_pos_limits(self, qpos: jax.Array) -> jax.Array:
-    out_of_limits = sj.relu(
-        self._soft_lowers - qpos,
+    out_of_limits = -sj.clip(
+        qpos - self._soft_lowers,
+        None,
+        0.0,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
         gated=False,
     )
-    out_of_limits += sj.relu(
+    out_of_limits += sj.clip(
         qpos - self._soft_uppers,
+        0.0,
+        None,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
         gated=False,
@@ -823,9 +827,10 @@ class Joystick(t1_base.T1Env):
   ) -> jax.Array:
     cmd_norm = sj.norm(commands)
     air_time = (air_time - threshold_min) * first_contact
-    upper = threshold_max - threshold_min
-    air_time = air_time - sj.relu(
-        air_time - upper,
+    air_time = sj.clip(
+        air_time,
+        None,
+        threshold_max - threshold_min,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
         gated=False,

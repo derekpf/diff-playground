@@ -293,8 +293,10 @@ class JoystickGaitTracking(h1_base.H1Env):
     # r_pos = sum(pos.values())
     # r_neg = jp.exp(0.2 * sum(neg.values()))
     # reward = r_pos * r_neg * self.dt
-    reward = sj.relu(
+    reward = sj.clip(
         sum(rewards.values()) * self.dt,
+        0.0,
+        None,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
         gated=False,

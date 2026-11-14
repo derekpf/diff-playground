@@ -155,6 +155,33 @@ class SoftjaxTest(absltest.TestCase):
         rtol=1e-5,
     )
 
+  def test_one_sided_clip(self):
+    x = jp.linspace(-2.0, 2.0, 41)
+    # Hard mode matches jnp.clip with a None bound.
+    np.testing.assert_allclose(
+        sj.clip(x, 0.0, None, gated=False), jp.clip(x, min=0.0)
+    )
+    np.testing.assert_allclose(
+        sj.clip(x, None, 0.5, gated=False), jp.clip(x, max=0.5)
+    )
+    # Soft mode is the one-sided limit of the two-sided relaxation.
+    for st_enable in (False, True):
+      kw = dict(softness=0.1, st_enable=st_enable, gated=False)
+      with self.subTest(st_enable=st_enable):
+        for new, old in (
+            (lambda v: sj.clip(v, 0.0, None, **kw), lambda v: sj.relu(v, **kw)),
+            (
+                lambda v: sj.clip(v, None, 0.5, **kw),
+                lambda v: v - sj.relu(v - 0.5, **kw),
+            ),
+        ):
+          np.testing.assert_allclose(jax.vmap(new)(x), jax.vmap(old)(x))
+          np.testing.assert_allclose(
+              jax.vmap(jax.grad(new))(x), jax.vmap(jax.grad(old))(x)
+          )
+    with self.assertRaises(ValueError):
+      sj.clip(x, None, None, softness=0.1, gated=False)
+
   def test_abs(self):
     np.testing.assert_allclose(sj.abs(0.01), 0.01, rtol=1e-5)
 

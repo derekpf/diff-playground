@@ -18,6 +18,7 @@ import functools
 import numbers
 from typing import Final
 
+import jax.numpy as _jp
 import softjax as _softjax
 
 _DEFAULT_SOFTNESS: Final[float] = 0.0
@@ -62,11 +63,33 @@ def _with_st_enable(fn, st_fn, softness_position):
   return select
 
 
+def _clip(x, a, b, softness=0.1, mode="smooth", gated=False):
+  """Soft `jnp.clip` that, like `jnp.clip`, accepts `None` for either bound.
+
+  One-sided bounds use the limits of softjax's two-sided relaxation
+  `a + softrelu(x - a) - softrelu(x - b)` as the missing bound goes to
+  infinity, so `clip(x, a, None)` is `a + softrelu(x - a)` and
+  `clip(x, None, b)` is `x - softrelu(x - b)`.
+  """
+  if a is not None and b is not None:
+    return _softjax.clip(x, a, b, softness=softness, mode=mode, gated=gated)
+  if a is None and b is None:
+    raise ValueError("At most one of `a` and `b` may be None.")
+  if mode == "hard":
+    return _jp.clip(x, a, b)
+  relu = functools.partial(
+      _softjax.softrelu, softness=softness, mode=mode, gated=gated
+  )
+  if b is None:
+    return a + relu(x - a)
+  return x - relu(x - b)
+
+
 # Keep the external softjax argument order while providing the project default
 # when callers omit softness.
 abs = _with_st_enable(_softjax.abs, _softjax.abs_st, 1)
 abs_st = _with_softness(_softjax.abs_st, 1)
-clip = _with_st_enable(_softjax.clip, _softjax.clip_st, 3)
+clip = _with_st_enable(_clip, _softjax.st(_clip), 3)
 greater = _with_st_enable(_softjax.greater, _softjax.greater_st, 2)
 greater_st = _with_softness(_softjax.greater_st, 2)
 greater_equal = _with_st_enable(_softjax.greater_equal, _softjax.greater_equal_st, 2)

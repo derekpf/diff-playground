@@ -659,24 +659,28 @@ class Joystick(g1_base.G1Env):
     r_contact_force = mjx_env.get_sensor_data(
         self.mj_model, data, "right_foot_force"
     )
-    cost = sj.relu(
+    cost = sj.clip(
         sj.abs(
             l_contact_force[2],
             softness=self.reward_softness,
             st_enable=self.reward_st_enable,
         )
         - self._config.reward_config.max_contact_force,
+        0.0,
+        None,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
         gated=False,
     )
-    cost += sj.relu(
+    cost += sj.clip(
         sj.abs(
             r_contact_force[2],
             softness=self.reward_softness,
             st_enable=self.reward_st_enable,
         )
         - self._config.reward_config.max_contact_force,
+        0.0,
+        None,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
         gated=False,
@@ -743,14 +747,18 @@ class Joystick(g1_base.G1Env):
     return jp.sum(jp.square(qpos - self._default_pose))
 
   def _cost_joint_pos_limits(self, qpos: jax.Array) -> jax.Array:
-    out_of_limits = sj.relu(
-        self._soft_lowers - qpos,
+    out_of_limits = -sj.clip(
+        qpos - self._soft_lowers,
+        None,
+        0.0,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
         gated=False,
     )
-    out_of_limits += sj.relu(
+    out_of_limits += sj.clip(
         qpos - self._soft_uppers,
+        0.0,
+        None,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
         gated=False,
@@ -904,8 +912,10 @@ class Joystick(g1_base.G1Env):
   ) -> jax.Array:
     del commands  # Unused.
     air_time = (air_time - threshold_min) * first_contact
-    air_time = air_time - sj.relu(
-        air_time - (threshold_max - threshold_min),
+    air_time = sj.clip(
+        air_time,
+        None,
+        threshold_max - threshold_min,
         softness=self.reward_softness,
         st_enable=self.reward_st_enable,
         gated=False,
