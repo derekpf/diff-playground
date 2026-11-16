@@ -418,7 +418,14 @@ class Joystick(g1_base.G1Env):
     rewards = {
         k: v * self._config.reward_config.scales[k] for k, v in rewards.items()
     }
-    reward = sum(rewards.values()) * self.dt
+    reward = sj.clip(
+        sum(rewards.values()) * self.dt,
+        0.0,
+        10000.0,
+        softness=self.reward_softness,
+        st_enable=self.reward_st_enable,
+        gated=False,
+    )
 
     state.info["push"] = push
     state.info["step"] += 1
