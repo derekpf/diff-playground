@@ -1,7 +1,7 @@
 <mujoco model="spot">
   <compiler angle="radian" meshdir="../../../../../mujoco_menagerie/boston_dynamics_spot/assets" autolimits="true"/>
 
-  <option iterations="5" ls_iterations="5" timestep="0.004">
+  <option iterations="10" ls_iterations="5" timestep="0.004">
     <flag eulerdamp="disable"/>
   </option>
 

@@ -15,7 +15,7 @@ Based on Coulomb's [1] rather than Spong's [2] model.
     <geom type="capsule" mass="1"/>
   </default>
 
-  <option timestep="0.01" iterations="2" ls_iterations="4">
+  <option timestep="0.01" iterations="10" ls_iterations="4">
     <flag constraint="disable" eulerdamp="disable"/>
   </option>
 

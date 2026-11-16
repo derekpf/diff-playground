@@ -77,6 +77,9 @@ class PandaBase(mjx_env.MjxEnv):
     self._model_assets = get_assets()
     mj_model = mujoco.MjModel.from_xml_string(xml, assets=self._model_assets)
     mj_model.opt.timestep = self.sim_dt
+    # The included mjx_scene.xml resolves to the Menagerie copy, which sets
+    # 5 iterations; use the same solver iterations as the other envs.
+    mj_model.opt.iterations = 10
 
     self._mj_model = mj_model
     self._mjx_model = mjx.put_model(mj_model, impl=self._config.impl)

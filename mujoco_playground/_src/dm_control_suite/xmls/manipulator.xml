@@ -13,7 +13,7 @@
     <quality shadowsize="2048"/>
   </visual>
 
-  <option timestep="0.005" cone="elliptic" iterations="4" ls_iterations="10"/>
+  <option timestep="0.005" cone="elliptic" iterations="10" ls_iterations="10"/>
 
   <custom>
     <numeric data="8" name="max_contact_points"/>

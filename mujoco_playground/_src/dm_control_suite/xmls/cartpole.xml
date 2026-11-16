@@ -3,7 +3,7 @@
   <include file="./common/visual.xml"/>
   <include file="./common/materials.xml"/>
 
-  <option timestep="0.01" iterations="1" ls_iterations="4">
+  <option timestep="0.01" iterations="10" ls_iterations="4">
     <flag contact="disable" eulerdamp="disable"/>
   </option>
 

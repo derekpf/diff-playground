@@ -1,7 +1,7 @@
 <mujoco model="robotis_op3">
   <compiler angle="radian" meshdir="../../../../mujoco_menagerie/robotis_op3/assets" autolimits="true"/>
 
-  <option iterations="5" ls_iterations="5" timestep=".004">
+  <option iterations="10" ls_iterations="5" timestep=".004">
     <flag eulerdamp="disable"/>
   </option>
 
