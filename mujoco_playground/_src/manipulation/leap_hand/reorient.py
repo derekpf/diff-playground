@@ -76,6 +76,10 @@ def default_config() -> config_dict.ConfigDict:
 class CubeReorient(leap_hand_base.LeapHandEnv):
   """Reorient a cube to match a goal orientation."""
 
+  # Softness of the success bonus. None uses ``reward_softness``, like every
+  # other term.
+  success_softness: Optional[float] = None
+
   def __init__(
       self,
       config: config_dict.ConfigDict = default_config(),
@@ -217,6 +221,12 @@ class CubeReorient(leap_hand_base.LeapHandEnv):
 
     ori_error = self._cube_orientation_error(data)
     success = ori_error < self._config.success_threshold
+    # The success bonus is scored against this goal, before it moves below.
+    success_softness = (
+        self.reward_softness
+        if self.success_softness is None
+        else self.success_softness
+    )
     state.info["steps_since_last_success"] = jp.where(
         success, 0, state.info["steps_since_last_success"] + 1
     )
@@ -256,7 +266,7 @@ class CubeReorient(leap_hand_base.LeapHandEnv):
     success_reward = sj.less(
         ori_error,
         self._config.success_threshold,
-        softness=self.reward_softness,
+        softness=success_softness,
         st_enable=self.reward_st_enable,
     )
     reward += success_reward * self._config.reward_config.success_reward
@@ -410,9 +420,11 @@ class CubeReorient(leap_hand_base.LeapHandEnv):
     cube_pos = self.get_cube_position(data)
     palm_pos = self.get_palm_position(data)
     cube_pose_mse = sj.norm(palm_pos - cube_pos)
+    # Distances are never negative, so the band is upper-only: a lower bound
+    # at 0 adds nothing hard, and smoothed it pushes the distance up near 0.
     cube_pos_reward = reward.tolerance(
         cube_pose_mse,
-        (0, 0.02),
+        (-jp.inf, 0.02),
         margin=0.05,
         sigmoid="linear",
         softness=self.reward_softness,
@@ -455,23 +467,17 @@ class CubeReorient(leap_hand_base.LeapHandEnv):
     cube_ori = self.get_cube_orientation(data)
     cube_goal_ori = self.get_cube_goal_orientation(data)
     quat_diff = math.quat_mul(cube_ori, math.quat_inv(cube_goal_ori))
-    quat_diff = sj.div(quat_diff, sj.norm(quat_diff))
-    return 2.0 * sj.arcsin(
-        sj.clip(
-            sj.norm(quat_diff[1:]),
-            0.0,
-            1.0,
-            softness=self.reward_softness,
-            st_enable=self.reward_st_enable,
-            gated=False,
-        )
-    )
+    # Rotation angle in [0, pi]. atan2 needs no normalization or clip (it only
+    # sees the ratio), stays well conditioned near pi where arcsin's slope
+    # blows up, and |w| handles the quaternion double cover.
+    return 2.0 * jp.arctan2(sj.norm(quat_diff[1:]), jp.abs(quat_diff[0]))
 
   def _reward_cube_orientation(self, data: mjx.Data) -> jax.Array:
     ori_error = self._cube_orientation_error(data)
+    # Upper-only band, as for the position term (the angle is never negative).
     return reward.tolerance(
         ori_error,
-        (0, 0.2),
+        (-jp.inf, 0.2),
         margin=jp.pi,
         sigmoid="linear",
         softness=self.reward_softness,
