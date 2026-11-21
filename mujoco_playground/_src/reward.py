@@ -14,6 +14,7 @@
 # ==============================================================================
 """A port of dm_control.utils.rewards to JAX."""
 
+import math
 import numbers
 import warnings
 
@@ -151,6 +152,33 @@ def tolerance(
   )
   if isinstance(margin, numbers.Real) and margin == 0:
     value = in_bounds
+  elif sigmoid == "linear":
+    # Linear shoulders as ReLUs of the distance past each bound, floored at 0.
+    # Hard mode is identical to the blended form below; with softness each
+    # ReLU is smoothed on its own (ungated), so the shoulder stays monotone
+    # with a correctly signed slope, instead of an arithmetic blend of the
+    # in-bounds and shoulder branches leaking into each other.
+    def past(distance, bound):
+      # An infinite bound has no shoulder (and would make the ReLU input inf).
+      if isinstance(bound, numbers.Real):
+        if math.isinf(bound):
+          return jp.zeros_like(x)
+        return sj.relu(distance, softness=softness, st_enable=st_enable)
+      finite = ~jp.isinf(bound)
+      safe = jp.where(finite, distance, 0.0)
+      return jp.where(
+          finite, sj.relu(safe, softness=softness, st_enable=st_enable), 0.0
+      )
+
+    over = past(x - upper, upper)
+    under = past(lower - x, lower)
+    value = sj.relu(
+        1.0 - (1.0 - value_at_margin) * sj.div(over + under, margin),
+        softness=softness,
+        st_enable=st_enable,
+    )
+    if not isinstance(margin, numbers.Real):
+      value = sj.where(margin == 0, in_bounds, value)
   else:
     # ``sj.where`` is an arithmetic blend, so avoid constructing an unused
     # infinite branch (which would otherwise produce ``0 * inf = NaN``).
