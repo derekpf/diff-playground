@@ -70,6 +70,12 @@ class Wrapper(mjx_env.MjxEnv):
   def episode_length(self) -> int:
     return self.env.episode_length
 
+  @property
+  def action_repeat(self) -> int:
+    # Ask the wrapped env, so a Brax EpisodeWrapper below reports the repeat
+    # it applies rather than the base env's configured one.
+    return self.env.action_repeat
+
   def __getattr__(self, name):
     if name == '__setstate__':
       raise AttributeError(name)

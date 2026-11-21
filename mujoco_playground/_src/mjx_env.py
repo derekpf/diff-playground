@@ -276,6 +276,11 @@ class MjxEnv(abc.ABC):
     return self._config.episode_length
 
   @property
+  def action_repeat(self) -> int:
+    """Control steps each policy action is repeated for during training."""
+    return int(self._config.get("action_repeat", 1))
+
+  @property
   def n_substeps(self) -> int:
     """Number of sim steps per control step."""
     return int(round(self.dt / self.sim_dt))
